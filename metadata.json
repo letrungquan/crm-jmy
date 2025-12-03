@@ -1,0 +1,5 @@
+{
+  "name": "JMY Beauty CRM",
+  "description": "A simple CRM application optimized for mobile devices to manage marketing leads for a beauty salon. It helps track the progress of each lead as sales staff contacts and converts them into customers.",
+  "requestFramePermissions": []
+}

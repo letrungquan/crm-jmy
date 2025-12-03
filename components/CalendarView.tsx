@@ -1,0 +1,273 @@
+import React, { useState, useMemo } from 'react';
+import { Lead } from '../types';
+
+interface CalendarViewProps {
+  leads: Lead[];
+  onSelectLead: (lead: Lead) => void;
+}
+
+const getWeekDays = (d: Date) => {
+    const date = new Date(d);
+    const day = date.getDay(); 
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday, week starts on Monday
+    const monday = new Date(date.setDate(diff));
+    
+    const days: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+        const nextDay = new Date(monday);
+        nextDay.setDate(monday.getDate() + i);
+        days.push(nextDay);
+    }
+    return days;
+}
+
+
+const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+
+  // --- Memos for Data Calculation ---
+  const monthLeads = useMemo(() => {
+    if (viewMode !== 'month') return [];
+    return leads.filter(lead => {
+        const leadDate = lead.appointmentDate ? new Date(lead.appointmentDate) : (lead.projectedAppointmentDate ? new Date(lead.projectedAppointmentDate) : null);
+        if (!leadDate || !lead.potentialRevenue) return false;
+        return leadDate.getFullYear() === currentDate.getFullYear() &&
+               leadDate.getMonth() === currentDate.getMonth();
+    });
+  }, [leads, currentDate, viewMode]);
+
+  const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
+
+  const weekLeads = useMemo(() => {
+    if (viewMode !== 'week') return [];
+    const start = weekDays[0];
+    const end = weekDays[6];
+    start.setHours(0,0,0,0);
+    end.setHours(23,59,59,999);
+
+    return leads.filter(lead => {
+        const date = lead.appointmentDate ? new Date(lead.appointmentDate) : (lead.projectedAppointmentDate ? new Date(lead.projectedAppointmentDate) : null);
+        if (!date || !lead.potentialRevenue) return false;
+        return date >= start && date <= end;
+    });
+  }, [leads, weekDays, viewMode]);
+
+
+  const { totalRevenue, scheduledRevenue, contactingRevenue } = useMemo(() => {
+      const relevantLeads = viewMode === 'month' ? monthLeads : weekLeads;
+      
+      const scheduled = relevantLeads
+        .filter(l => ['scheduled', 'completed'].includes(l.status))
+        .reduce((total, lead) => total + (lead.potentialRevenue || 0), 0);
+
+      const contacting = relevantLeads
+        .filter(l => l.status === 'contacting')
+        .reduce((total, lead) => total + (lead.potentialRevenue || 0), 0);
+
+      return { totalRevenue: scheduled + contacting, scheduledRevenue: scheduled, contactingRevenue: contacting };
+
+  }, [monthLeads, weekLeads, viewMode]);
+
+  // --- Helper Functions ---
+  const formatCurrency = (value: number) => {
+      if (typeof value !== 'number') return '';
+      return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+  }
+
+  const changeDate = (offset: number) => {
+    setCurrentDate(prev => {
+        const newDate = new Date(prev);
+        if (viewMode === 'month') {
+            newDate.setMonth(newDate.getMonth() + offset, 1);
+        } else {
+            newDate.setDate(newDate.getDate() + (offset * 7));
+        }
+        return newDate;
+    });
+  };
+
+  const getHeaderText = () => {
+    if (viewMode === 'month') {
+        return `Tháng ${currentDate.getMonth() + 1}, ${currentDate.getFullYear()}`;
+    }
+    const start = weekDays[0];
+    const end = weekDays[6];
+    const startMonth = start.getMonth() + 1;
+    const endMonth = end.getMonth() + 1;
+    if (startMonth === endMonth) {
+         return `Tuần: ${start.getDate()} - ${end.getDate()}/${endMonth}/${end.getFullYear()}`;
+    }
+    return `Tuần: ${start.getDate()}/${startMonth} - ${end.getDate()}/${endMonth}/${end.getFullYear()}`;
+  }
+  
+  // --- Rendering Month View ---
+  const renderMonthView = () => {
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const startDay = startOfMonth.getDay(); // 0 for Sunday
+    const daysInMonth = endOfMonth.getDate();
+    const daysOfWeek = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const today = new Date();
+    
+    const getLeadsForDay = (day: number) => {
+        const dailyLeads = monthLeads.filter(lead => {
+            const leadDate = new Date(lead.appointmentDate || lead.projectedAppointmentDate!);
+            return leadDate.getDate() === day;
+        });
+        const dailyRevenue = dailyLeads.reduce((total, lead) => total + (lead.potentialRevenue || 0), 0);
+        return { dailyLeads, dailyRevenue };
+    };
+
+    return (
+        <div className="grid grid-cols-7 gap-px bg-slate-200 border-t border-l border-slate-200 rounded-lg overflow-hidden">
+            {daysOfWeek.map(day => (
+              <div key={day} className="py-2 text-center font-semibold text-xs sm:text-sm text-slate-600 bg-slate-100">
+                {day}
+              </div>
+            ))}
+            {Array.from({ length: startDay }).map((_, i) => (
+              <div key={`empty-${i}`} className="bg-slate-50 min-h-[120px] sm:min-h-[140px]"></div>
+            ))}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const { dailyLeads, dailyRevenue } = getLeadsForDay(day);
+              const isToday = today.getFullYear() === currentDate.getFullYear() && today.getMonth() === currentDate.getMonth() && today.getDate() === day;
+              return (
+                <div key={day} className="p-1 sm:p-2 bg-white min-h-[120px] sm:min-h-[140px] flex flex-col transition-colors hover:bg-slate-50">
+                  <div className="flex justify-between items-center">
+                    <span className={`flex items-center justify-center h-6 w-6 sm:h-7 sm:w-7 rounded-full text-xs sm:text-sm font-medium ${isToday ? 'bg-blue-600 text-white' : 'text-slate-700'}`}>
+                      {day}
+                    </span>
+                    {dailyRevenue > 0 && (
+                         <span className="text-xs font-bold text-green-700 bg-green-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md hidden sm:inline">{formatCurrency(dailyRevenue)}</span>
+                    )}
+                  </div>
+                  <div className="mt-1 sm:mt-2 space-y-1.5 overflow-y-auto flex-1">
+                    {dailyLeads.map(lead => {
+                      const isScheduled = ['scheduled', 'completed'].includes(lead.status);
+                      const theme = {
+                          bg: isScheduled ? 'bg-blue-100' : 'bg-orange-100',
+                          text: isScheduled ? 'text-blue-800' : 'text-orange-800',
+                          border: isScheduled ? 'border-blue-200' : 'border-orange-200',
+                          hoverBg: isScheduled ? 'hover:bg-blue-200' : 'hover:bg-orange-200',
+                      };
+                      return (
+                      <div 
+                        key={lead.id} onClick={() => onSelectLead(lead)}
+                        className={`p-1 sm:p-1.5 text-xs ${theme.bg} ${theme.text} rounded-md cursor-pointer ${theme.hoverBg} border ${theme.border}`}
+                        title={`${lead.name} - ${formatCurrency(lead.potentialRevenue!)}`}
+                      >
+                        <p className="font-semibold truncate">{lead.name}</p>
+                        <p className="hidden sm:block truncate">{formatCurrency(lead.potentialRevenue!)}</p>
+                      </div>
+                    )})}
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+    );
+  };
+  
+  // --- Rendering Week View ---
+  const renderWeekView = () => {
+    const daysOfWeek = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+
+    const getLeadsForDay = (date: Date) => {
+        const dailyLeads = weekLeads
+            .filter(lead => {
+                const leadDate = new Date(lead.appointmentDate || lead.projectedAppointmentDate!);
+                return leadDate.toDateString() === date.toDateString();
+            })
+            .sort((a,b) => {
+                const aTime = new Date(a.appointmentDate || a.projectedAppointmentDate!).getTime();
+                const bTime = new Date(b.appointmentDate || b.projectedAppointmentDate!).getTime();
+                return aTime - bTime;
+            });
+
+        const dailyRevenue = dailyLeads.reduce((total, lead) => total + (lead.potentialRevenue || 0), 0);
+        return { dailyLeads, dailyRevenue };
+    }
+    
+    return (
+        <div className="space-y-4">
+            {weekDays.map(day => {
+                const { dailyLeads, dailyRevenue } = getLeadsForDay(day);
+                return (
+                    <div key={day.toISOString()} className="bg-white p-3 rounded-lg shadow">
+                        <div className="flex justify-between items-center mb-3 pb-2 border-b">
+                            <h3 className="font-bold text-slate-800">{daysOfWeek[day.getDay()]}, {day.getDate()}/{day.getMonth() + 1}</h3>
+                            <span className="text-sm font-bold text-green-700 bg-green-100 px-2 py-1 rounded-md">{formatCurrency(dailyRevenue)}</span>
+                        </div>
+                        <div className="space-y-2">
+                            {dailyLeads.length > 0 ? dailyLeads.map(lead => {
+                                 const isScheduled = ['scheduled', 'completed'].includes(lead.status);
+                                  const theme = {
+                                      bg: isScheduled ? 'bg-blue-50' : 'bg-orange-50',
+                                      text: isScheduled ? 'text-blue-800' : 'text-orange-800',
+                                      border: isScheduled ? 'border-blue-300' : 'border-orange-300',
+                                      hoverBg: isScheduled ? 'hover:bg-blue-100' : 'hover:bg-orange-100',
+                                      revenueText: isScheduled ? 'text-blue-700' : 'text-orange-700',
+                                  };
+                                return (
+                                    <div key={lead.id} onClick={() => onSelectLead(lead)} className={`p-2.5 text-sm ${theme.bg} ${theme.text} rounded-lg cursor-pointer ${theme.hoverBg} border ${theme.border} flex justify-between items-center`}>
+                                        <div>
+                                            <p className="font-bold truncate">{lead.name}</p>
+                                            <p className="text-xs truncate text-slate-500 mt-0.5">{lead.service}</p>
+                                        </div>
+                                        <div className="text-right flex-shrink-0 ml-2">
+                                            <p className={`font-bold ${theme.revenueText}`}>{formatCurrency(lead.potentialRevenue!)}</p>
+                                            {isScheduled && lead.appointmentDate && 
+                                                <p className="text-xs font-semibold text-slate-600">{new Date(lead.appointmentDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</p> 
+                                            }
+                                        </div>
+                                    </div>
+                                )
+                            }) : <p className="text-sm text-slate-400 text-center py-2">Không có lịch hẹn.</p>}
+                        </div>
+                    </div>
+                )
+            })}
+        </div>
+    )
+  }
+  
+  return (
+    <div className="w-full bg-slate-50 p-2 sm:p-6 rounded-lg">
+      <header className="flex flex-col sm:flex-row justify-between items-center pb-4 mb-4 border-b border-slate-200 bg-white p-4 rounded-lg shadow-sm">
+        <div className="flex items-center">
+            <button onClick={() => changeDate(-1)} className="p-2 rounded-full hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <div className="flex flex-col sm:flex-row items-center">
+                <h2 className="text-lg sm:text-2xl font-bold text-slate-800 mx-2 sm:mx-4 text-center">
+                    {getHeaderText()}
+                </h2>
+                <div className="flex items-center bg-slate-100 p-1 rounded-lg mt-2 sm:mt-0">
+                    <button onClick={() => setViewMode('month')} className={`px-3 py-1 text-sm font-semibold rounded-md transition-all ${viewMode === 'month' ? 'bg-white text-blue-600 shadow' : 'text-slate-600'}`}>Tháng</button>
+                    <button onClick={() => setViewMode('week')} className={`px-3 py-1 text-sm font-semibold rounded-md transition-all ${viewMode === 'week' ? 'bg-white text-blue-600 shadow' : 'text-slate-600'}`}>Tuần</button>
+                </div>
+            </div>
+            <button onClick={() => changeDate(1)} className="p-2 rounded-full hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+        </div>
+        <div className="mt-4 sm:mt-0 text-center sm:text-right">
+            <p className="text-sm font-medium text-slate-500">TỔNG DỰ THU</p>
+            <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRevenue)}</p>
+            <div className="text-xs font-medium mt-1">
+                <span className="text-blue-600">Đã hẹn: {formatCurrency(scheduledRevenue)}</span>
+                <span className="mx-2 text-slate-400">|</span>
+                <span className="text-orange-500">Đang hẹn: {formatCurrency(contactingRevenue)}</span>
+            </div>
+        </div>
+      </header>
+      
+      {viewMode === 'month' ? renderMonthView() : renderWeekView()}
+
+    </div>
+  );
+};
+
+export default CalendarView;
