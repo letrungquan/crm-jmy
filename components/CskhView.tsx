@@ -7,7 +7,7 @@ interface CskhViewProps {
   cskhItems: CskhItem[];
   statuses: StatusConfig[];
   onUpdateCskhStatus: (cskhId: string, newStatusId: string) => void;
-  onDeleteCskh: (cskhId: string) => void;
+  onDeleteCskh?: (cskhId: string) => void;
   onCustomizeStatuses: () => void;
   onSelectCskh: (item: CskhItem) => void;
 }

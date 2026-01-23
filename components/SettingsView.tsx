@@ -16,6 +16,7 @@ interface SettingsViewProps {
   sales?: Sale[];
   onRefresh?: () => void;
   isAdmin?: boolean;
+  canEdit?: boolean;
 }
 
 const ConfigSection: React.FC<{
@@ -23,7 +24,8 @@ const ConfigSection: React.FC<{
   description: string;
   items: string[];
   onUpdate: (items: string[]) => void;
-}> = ({ title, description, items, onUpdate }) => {
+  canEdit?: boolean;
+}> = ({ title, description, items, onUpdate, canEdit = true }) => {
   const [newItem, setNewItem] = useState('');
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
@@ -31,34 +33,40 @@ const ConfigSection: React.FC<{
         <h3 className="text-lg font-bold text-slate-800">{title}</h3>
         <p className="text-sm text-slate-500">{description}</p>
       </div>
-      <div className="flex space-x-2 mb-4">
-        <input
-          type="text"
-          value={newItem}
-          onChange={(e) => setNewItem(e.target.value)}
-          placeholder="Nhập tên mới..."
-          className="flex-1 px-3 py-2 border border-slate-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-        <button
-          onClick={() => { if(newItem.trim()) { onUpdate([...items, newItem.trim()]); setNewItem(''); } }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-semibold"
-        >
-          Thêm
-        </button>
-      </div>
+      
+      {canEdit && (
+          <div className="flex space-x-2 mb-4">
+            <input
+              type="text"
+              value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              placeholder="Nhập tên mới..."
+              className="flex-1 px-3 py-2 border border-slate-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            />
+            <button
+              onClick={() => { if(newItem.trim()) { onUpdate([...items, newItem.trim()]); setNewItem(''); } }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-semibold"
+            >
+              Thêm
+            </button>
+          </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {items.map((item, index) => (
           <span key={index} className="px-3 py-1 bg-slate-100 border border-slate-200 rounded-full text-sm font-medium text-slate-700 flex items-center group hover:bg-white hover:border-blue-300 transition-colors">
             {item}
-            <button 
-                onClick={() => { const n = [...items]; n.splice(index, 1); onUpdate(n); }} 
-                className="ml-2 text-slate-400 hover:text-red-500 focus:outline-none"
-                title="Xóa"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
+            {canEdit && (
+                <button 
+                    onClick={() => { const n = [...items]; n.splice(index, 1); onUpdate(n); }} 
+                    className="ml-2 text-slate-400 hover:text-red-500 focus:outline-none"
+                    title="Xóa"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            )}
           </span>
         ))}
       </div>
@@ -67,6 +75,7 @@ const ConfigSection: React.FC<{
 };
 
 const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (roles: RoleDefinition[]) => void }> = ({ roles, onUpdate }) => {
+    // Role management is strictly for Admins (handled by parent conditional rendering)
     const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [newRoleName, setNewRoleName] = useState('');
@@ -104,7 +113,7 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (role
         if (roleIndex === -1) return;
         
         const role = { ...roles[roleIndex] };
-        if (role.isSystem && role.id === 'admin') return; // Cannot edit admin perms
+        if (role.isSystem && role.id === 'admin') return; 
 
         const permSet = new Set(role.permissions);
         if (permSet.has(perm as Permission)) {
@@ -188,7 +197,6 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (role
                                                 const isChecked = selectedRole.permissions.includes(permKey as Permission);
                                                 const isDisabled = selectedRole.id === 'admin';
                                                 
-                                                // Human readable labels
                                                 let label = action;
                                                 if (action === 'view') label = 'Xem';
                                                 if (action === 'create') label = 'Thêm mới';
@@ -225,94 +233,45 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (role
     );
 };
 
+// ... UserManagementSection remains similar but handled by parent for access control
+
 const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], onRefresh: () => void, isAdmin: boolean }> = ({ sales, roles, onRefresh, isAdmin }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<Sale | null>(null);
-    
-    // Form state
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
     const [roleId, setRoleId] = useState<string>('sale');
     const [loading, setLoading] = useState(false);
 
-    const openAddModal = () => {
-        setEditingUser(null);
-        setEmail('');
-        setPassword('');
-        setName('');
-        setRoleId('sale');
-        setIsModalOpen(true);
-    };
-
-    const openEditModal = (user: Sale) => {
-        setEditingUser(user);
-        setEmail(user.id); // Placeholder/ID - can't edit email easily
-        setPassword(''); // Can't edit password here
-        setName(user.name);
-        setRoleId(user.role || 'sale');
-        setIsModalOpen(true);
-    };
+    const openAddModal = () => { setEditingUser(null); setEmail(''); setPassword(''); setName(''); setRoleId('sale'); setIsModalOpen(true); };
+    const openEditModal = (user: Sale) => { setEditingUser(user); setEmail(user.id); setPassword(''); setName(user.name); setRoleId(user.role || 'sale'); setIsModalOpen(true); };
 
     const handleSaveUser = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        
+        e.preventDefault(); setLoading(true);
         try {
             if (editingUser) {
-                // --- EDIT MODE ---
-                const { error } = await supabase
-                    .from('profiles')
-                    .update({ name: name, role: roleId })
-                    .eq('id', editingUser.id);
-
+                const { error } = await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', editingUser.id);
                 if (error) throw error;
                 alert('Cập nhật thông tin thành công!');
             } else {
-                // --- CREATE MODE ---
                 if (password.length < 6) throw new Error("Mật khẩu phải từ 6 ký tự trở lên.");
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: { data: { name: name } }
-                });
-
+                const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name: name } } });
                 if (error) throw error;
-
-                if (data.user) {
-                    // Update role in profiles table
-                    await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', data.user.id);
-                    alert('Tạo nhân viên thành công! User mới có thể đăng nhập ngay.');
-                }
+                if (data.user) { await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', data.user.id); alert('Tạo nhân viên thành công!'); }
             }
-
-            setIsModalOpen(false);
-            onRefresh();
-        } catch (err: any) {
-            alert('Lỗi: ' + (err.message || err));
-        } finally {
-            setLoading(false);
-        }
+            setIsModalOpen(false); onRefresh();
+        } catch (err: any) { alert('Lỗi: ' + (err.message || err)); } finally { setLoading(false); }
     };
 
     const handleDeleteUser = async (user: Sale) => {
-        if (!confirm(`Bạn có chắc chắn muốn xóa nhân viên "${user.name}"? Hành động này sẽ xóa profile, họ sẽ không còn thấy trong danh sách.`)) return;
-        
+        if (!confirm(`Bạn có chắc chắn muốn xóa nhân viên "${user.name}"?`)) return;
         setLoading(true);
         try {
-            // Delete profile row. 
-            // Note: This does NOT delete from auth.users (requires server-side admin API).
-            // But deleting profile effectively removes them from the App logic.
             const { error } = await supabase.from('profiles').delete().eq('id', user.id);
             if (error) throw error;
-            
-            alert(`Đã xóa nhân viên ${user.name}`);
-            onRefresh();
-        } catch(err: any) {
-            alert('Lỗi xóa: ' + err.message);
-        } finally {
-            setLoading(false);
-        }
+            alert(`Đã xóa nhân viên ${user.name}`); onRefresh();
+        } catch(err: any) { alert('Lỗi xóa: ' + err.message); } finally { setLoading(false); }
     };
 
     const getRoleName = (id: string) => roles.find(r => r.id === id)?.name || id;
@@ -320,115 +279,16 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
     return (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
             <div className="flex justify-between items-start mb-4">
-                <div>
-                    <h3 className="text-lg font-bold text-slate-800">Quản lý nhân sự</h3>
-                    <p className="text-sm text-slate-500">Danh sách tài khoản truy cập hệ thống</p>
-                </div>
-                {isAdmin && (
-                    <button 
-                        onClick={openAddModal}
-                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-semibold flex items-center"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        Thêm nhân viên
-                    </button>
-                )}
+                <div><h3 className="text-lg font-bold text-slate-800">Quản lý nhân sự</h3><p className="text-sm text-slate-500">Danh sách tài khoản truy cập hệ thống</p></div>
+                {isAdmin && (<button onClick={openAddModal} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-semibold">+ Thêm nhân viên</button>)}
             </div>
-
             <div className="overflow-hidden border border-slate-200 rounded-lg">
                 <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tên</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Vai trò</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Hành động</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-200">
-                        {sales.map((sale) => (
-                            <tr key={sale.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-slate-900">{sale.name}</div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}`}>
-                                        {getRoleName(sale.role)}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    {isAdmin && (
-                                        <div className="flex justify-end space-x-3">
-                                            <button onClick={() => openEditModal(sale)} className="text-blue-600 hover:text-blue-900" title="Sửa">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                            </button>
-                                            <button onClick={() => handleDeleteUser(sale)} className="text-red-600 hover:text-red-900" title="Xóa">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                            </button>
-                                        </div>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                        {sales.length === 0 && (
-                            <tr>
-                                <td colSpan={3} className="px-6 py-4 text-center text-sm text-slate-500">Chưa có dữ liệu nhân sự</td>
-                            </tr>
-                        )}
-                    </tbody>
+                    <thead className="bg-slate-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tên</th><th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Vai trò</th><th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Hành động</th></tr></thead>
+                    <tbody className="bg-white divide-y divide-slate-200">{sales.map((sale) => (<tr key={sale.id} className="hover:bg-slate-50"><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{sale.name}</td><td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}`}>{getRoleName(sale.role)}</span></td><td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">{isAdmin && (<div className="flex justify-end space-x-3"><button onClick={() => openEditModal(sale)} className="text-blue-600 hover:text-blue-900">Sửa</button><button onClick={() => handleDeleteUser(sale)} className="text-red-600 hover:text-red-900">Xóa</button></div>)}</td></tr>))}</tbody>
                 </table>
             </div>
-
-            {isModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-                        <h3 className="text-lg font-bold text-slate-800 mb-4">
-                            {editingUser ? 'Cập nhật nhân viên' : 'Thêm nhân viên mới'}
-                        </h3>
-                        <form onSubmit={handleSaveUser} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700">Tên hiển thị</label>
-                                <input type="text" required value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
-                            </div>
-                            
-                            {!editingUser && (
-                                <>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700">Email đăng nhập</label>
-                                        <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700">Mật khẩu</label>
-                                        <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Ít nhất 6 ký tự" />
-                                    </div>
-                                </>
-                            )}
-                            
-                            {editingUser && (
-                                <div className="p-3 bg-yellow-50 text-xs text-yellow-800 rounded border border-yellow-100">
-                                    Lưu ý: Không thể thay đổi Email hoặc Mật khẩu tại đây.
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700">Vai trò</label>
-                                <select value={roleId} onChange={e => setRoleId(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                                    {roles.map(r => (
-                                        <option key={r.id} value={r.id}>{r.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="flex justify-end space-x-3 mt-6">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">Hủy</button>
-                                <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
-                                    {loading ? 'Đang xử lý...' : (editingUser ? 'Cập nhật' : 'Tạo tài khoản')}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            {isModalOpen && (<div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6"><h3 className="text-lg font-bold text-slate-800 mb-4">{editingUser ? 'Cập nhật nhân viên' : 'Thêm nhân viên mới'}</h3><form onSubmit={handleSaveUser} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700">Tên hiển thị</label><input type="text" required value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" /></div>{!editingUser && (<><div><label className="block text-sm font-medium text-slate-700">Email</label><input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" /></div><div><label className="block text-sm font-medium text-slate-700">Mật khẩu</label><input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" /></div></>)}<div><label className="block text-sm font-medium text-slate-700">Vai trò</label><select value={roleId} onChange={e => setRoleId(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md">{roles.map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}</select></div><div className="flex justify-end space-x-3 mt-6"><button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">Hủy</button><button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">{loading ? 'Đang xử lý...' : (editingUser ? 'Cập nhật' : 'Tạo')}</button></div></form></div></div>)}
         </div>
     );
 };
@@ -438,37 +298,34 @@ const SettingsView: React.FC<SettingsViewProps> = (props) => {
     <div className="p-6 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold text-slate-800 mb-6">Cài đặt hệ thống</h2>
       
-      {/* Role Management Section */}
       {props.roles && props.onUpdateRoles && props.isAdmin && (
           <RoleManagementSection roles={props.roles} onUpdate={props.onUpdateRoles} />
       )}
 
-      {/* User Management Section */}
-      {props.sales && props.onRefresh && (
+      {props.sales && props.onRefresh && props.isAdmin && (
           <UserManagementSection 
             sales={props.sales} 
             onRefresh={props.onRefresh} 
-            isAdmin={props.isAdmin || false} 
+            isAdmin={props.isAdmin} 
             roles={props.roles || []}
           />
       )}
 
-      <ConfigSection title="Nguồn khách hàng" description="Nơi khách hàng biết đến spa" items={props.sources} onUpdate={props.onUpdateSources} />
-      <ConfigSection title="Mối quan hệ" description="Phân loại trạng thái quan hệ khách hàng" items={props.relationships} onUpdate={props.onUpdateRelationships} />
-      <ConfigSection title="Nhóm khách hàng" description="Phân loại khách hàng theo nhóm" items={props.customerGroups} onUpdate={props.onUpdateCustomerGroups} />
+      <ConfigSection title="Nguồn khách hàng" description="Nơi khách hàng biết đến spa" items={props.sources} onUpdate={props.onUpdateSources} canEdit={props.canEdit} />
+      <ConfigSection title="Mối quan hệ" description="Phân loại trạng thái quan hệ khách hàng" items={props.relationships} onUpdate={props.onUpdateRelationships} canEdit={props.canEdit} />
+      <ConfigSection title="Nhóm khách hàng" description="Phân loại khách hàng theo nhóm" items={props.customerGroups} onUpdate={props.onUpdateCustomerGroups} canEdit={props.canEdit} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 mt-8 border-t pt-8">
-           <div className="col-span-2 text-lg font-bold text-slate-700">Công cụ sửa lỗi Database (Dành cho Dev/Admin)</div>
-           
-           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-5 md:col-span-2">
-              <h3 className="text-yellow-800 font-bold mb-2">9. Tạo Bảng Cấu Hình (Settings)</h3>
-              <p className="text-xs text-yellow-700 mb-3">Chạy lệnh này để tạo bảng lưu trữ: Nguồn khách hàng, Mối quan hệ, Nhóm khách hàng... vào Database.</p>
-              <div className="relative mb-3">
-                 <textarea readOnly value={props.useLocalOnly ? 'Offline Mode' : `CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now()); ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY; CREATE POLICY "Public_Settings" ON app_settings FOR ALL USING (true) WITH CHECK (true); GRANT ALL ON TABLE app_settings TO anon, authenticated, service_role;`} className="w-full h-24 text-[10px] font-mono p-2 border border-yellow-200 rounded bg-white focus:outline-none" />
-                 <button onClick={() => { navigator.clipboard.writeText(`CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now()); ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY; CREATE POLICY "Public_Settings" ON app_settings FOR ALL USING (true) WITH CHECK (true); GRANT ALL ON TABLE app_settings TO anon, authenticated, service_role;`); alert('Đã copy!'); }} className="absolute top-2 right-2 bg-yellow-600 text-white px-2 py-1 rounded text-xs hover:bg-yellow-700">Copy</button>
+      {props.isAdmin && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 mt-8 border-t pt-8">
+               <div className="col-span-2 text-lg font-bold text-slate-700">Công cụ sửa lỗi Database (Dành cho Dev/Admin)</div>
+               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-5 md:col-span-2">
+                  <h3 className="text-yellow-800 font-bold mb-2">9. Tạo Bảng Cấu Hình</h3>
+                  <div className="relative mb-3">
+                     <textarea readOnly value={props.useLocalOnly ? 'Offline Mode' : `CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());`} className="w-full h-24 text-[10px] font-mono p-2 border border-yellow-200 rounded bg-white focus:outline-none" />
+                  </div>
               </div>
           </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -815,7 +815,14 @@ function App() {
         isDangerous={confirmModal.isDangerous}
       />
 
-      <Sidebar activeView={activeView} setActiveView={setActiveView} isOpen={false} setIsOpen={() => {}} onAddLead={() => setIsAddModalOpen(true)} />
+      <Sidebar 
+        activeView={activeView} 
+        setActiveView={setActiveView} 
+        isOpen={false} 
+        setIsOpen={() => {}} 
+        onAddLead={() => setIsAddModalOpen(true)}
+        hasPermission={hasPermission}
+      />
       <div className="flex-1 flex flex-col overflow-hidden">
         <MainHeader 
             onAddLead={() => setIsAddModalOpen(true)} 
@@ -853,7 +860,7 @@ function App() {
                 cskhItems={cskhItems} 
                 statuses={cskhStatuses} 
                 onUpdateCskhStatus={handleUpdateCskhStatus} 
-                onDeleteCskh={hasPermission('lead.delete') ? handleDeleteCskh : (id) => { console.log('No permission to delete CSKH'); }} 
+                onDeleteCskh={hasPermission('lead.delete') ? handleDeleteCskh : undefined} 
                 onCustomizeStatuses={() => {}} 
                 onSelectCskh={(item) => {
                     const lead = leads.find(l => l.id === item.originalLeadId);
@@ -891,7 +898,7 @@ function App() {
           )}
           {activeView === 'orders' && <OrderList orders={orders} customers={customersData} sales={sales} onAddOrder={() => setIsAddOrderModalOpen(true)} onImportOrders={() => setIsImportOrderModalOpen(true)} onDeleteOrder={hasPermission('order.delete') ? handleDeleteOrder : undefined} />}
           {activeView === 'revenue' && <CalendarView leads={leads} onSelectLead={setSelectedLead} />}
-          {activeView === 'settings' && (
+          {activeView === 'settings' && hasPermission('settings.access') && (
             <SettingsView 
                 sources={sources} 
                 relationships={relationships} 
@@ -905,7 +912,13 @@ function App() {
                 sales={sales}
                 onRefresh={() => fetchData(true)}
                 isAdmin={isAdmin}
+                canEdit={hasPermission('settings.access')}
             />
+          )}
+          {activeView === 'settings' && !hasPermission('settings.access') && (
+              <div className="flex h-full items-center justify-center text-slate-500">
+                  Bạn không có quyền truy cập vào mục này.
+              </div>
           )}
         </main>
       </div>
