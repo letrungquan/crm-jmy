@@ -4,7 +4,7 @@ import { supabase } from './lib/supabaseClient';
 import useLocalStorage from './hooks/useLocalStorage';
 import { 
   Lead, Sale, Customer, Order, Note, CskhItem, CustomerData, 
-  StatusConfig, AppView, RoleDefinition 
+  StatusConfig, AppView, RoleDefinition, Permission 
 } from './types';
 import { 
   INITIAL_STATUSES, INITIAL_CSKH_STATUSES, INITIAL_SALES, INITIAL_LEADS 
@@ -150,6 +150,17 @@ function App() {
   // Derived State
   const currentUser = userProfile?.id || 'offline_admin';
   const isAdmin = userProfile?.role === 'admin' || useLocalOnly;
+
+  // --- PERMISSION CHECK ---
+  const currentRoleDefinition = useMemo(() => {
+    return roles.find(r => r.id === userProfile?.role);
+  }, [roles, userProfile]);
+
+  const hasPermission = (permission: Permission) => {
+      if (useLocalOnly) return true; // Offline mode is basically admin
+      if (userProfile?.role === 'admin') return true; // Admin always has all permissions
+      return currentRoleDefinition?.permissions.includes(permission) || false;
+  };
 
   // Merge Customers Data with Leads & Orders to create full Customer objects
   const customers: Customer[] = useMemo(() => {
@@ -371,6 +382,11 @@ function App() {
 
   // --- HELPERS FOR SETTINGS UPDATE ---
   const handleUpdateSetting = async (key: string, newValue: any[]) => {
+      if (!hasPermission('settings.access')) {
+          alert('Bạn không có quyền thay đổi cài đặt.');
+          return;
+      }
+
       // Optimistic update
       if (key === 'sources') setSources(newValue);
       else if (key === 'relationships') setRelationships(newValue);
@@ -432,8 +448,8 @@ function App() {
   };
 
   const handleDeleteCustomer = (phone: string) => {
-    if (!isAdmin) {
-        alert("CHỈ ADMIN MỚI ĐƯỢC XÓA KHÁCH HÀNG.");
+    if (!hasPermission('customer.delete')) {
+        alert("BẠN KHÔNG CÓ QUYỀN XÓA KHÁCH HÀNG.");
         return;
     }
     const customer = customers.find(c => c.phone === phone);
@@ -491,6 +507,11 @@ function App() {
   };
 
   const handleDeleteLead = (leadId: string) => {
+    if (!hasPermission('lead.delete')) {
+         alert("Bạn không có quyền xóa cơ hội này.");
+         return;
+    }
+
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
@@ -525,8 +546,8 @@ function App() {
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    if (!isAdmin) {
-        alert("CHỈ ADMIN MỚI ĐƯỢC XÓA ĐƠN HÀNG.");
+    if (!hasPermission('order.delete')) {
+        alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG.");
         return;
     }
     setConfirmModal({
@@ -699,6 +720,11 @@ function App() {
   };
 
   const handleDeleteCskh = (cskhId: string) => {
+      if (!hasPermission('lead.delete')) { // Assuming CSKH deletion requires lead deletion rights for now
+          alert("Bạn không có quyền xóa phiếu CSKH.");
+          return;
+      }
+
       const item = cskhItems.find(i => i.id === cskhId);
       if (!item) return;
 
@@ -806,13 +832,19 @@ function App() {
         <main className="flex-1 overflow-auto bg-white">
           {activeView === 'dashboard' && <ReportsView leads={leads} orders={orders} customers={customersData} sources={sources} />}
           {activeView === 'sales' && (
-            <KanbanBoard leads={leads} sales={sales} statuses={statuses} onSelectLead={setSelectedLead} onUpdateLeadStatus={handleUpdateLeadStatus} onAddLead={() => setIsAddModalOpen(true)} 
+            <KanbanBoard 
+                leads={leads} 
+                sales={sales} 
+                statuses={statuses} 
+                onSelectLead={setSelectedLead} 
+                onUpdateLeadStatus={handleUpdateLeadStatus} 
+                onAddLead={() => setIsAddModalOpen(true)} 
                 onAcceptLead={async (id) => {
                     const { error } = await supabase.from('leads').update({ assigned_to: currentUser, status: 'contacting' }).eq('id', id);
                     if (!error) fetchData(true);
                     else alert(formatErrorMessage(error));
                 }}
-                onDeleteLead={handleDeleteLead}
+                onDeleteLead={hasPermission('lead.delete') ? handleDeleteLead : undefined}
                 sources={['all', ...sources]} selectedSource="all" onSourceChange={() => {}} onCustomizeStatuses={() => {}} selectedSale="all" onSaleChange={() => {}} 
             />
           )}
@@ -821,7 +853,7 @@ function App() {
                 cskhItems={cskhItems} 
                 statuses={cskhStatuses} 
                 onUpdateCskhStatus={handleUpdateCskhStatus} 
-                onDeleteCskh={handleDeleteCskh} 
+                onDeleteCskh={hasPermission('lead.delete') ? handleDeleteCskh : (id) => { console.log('No permission to delete CSKH'); }} 
                 onCustomizeStatuses={() => {}} 
                 onSelectCskh={(item) => {
                     const lead = leads.find(l => l.id === item.originalLeadId);
@@ -854,10 +886,10 @@ function App() {
           )}
           {activeView === 'customers' && (
             customerViewMode === 'list' 
-                ? <CustomerList customers={customers} onSelectCustomer={(c) => { setSelectedCustomerPhone(c.phone); setCustomerViewMode('detail'); }} onAddCustomer={() => { setEditingCustomer(null); setIsCustomerModalOpen(true); }} onDeleteCustomer={isAdmin ? handleDeleteCustomer : undefined} />
-                : selectedCustomer && <CustomerDetailView customer={selectedCustomer} sales={sales} statuses={statuses} cskhItems={cskhItems.filter(item => item.customerPhone === selectedCustomer.phone)} relationships={relationships} onClose={() => { setCustomerViewMode('list'); setSelectedCustomerPhone(null); }} onSelectLead={setSelectedLead} onUpdateCustomer={handleUpdateCustomer} onEdit={(c) => { setEditingCustomer(c); setIsCustomerModalOpen(true); }} onDelete={isAdmin ? handleDeleteCustomer : undefined} onAddNote={handleAddNote} currentUser={currentUser} isAdmin={isAdmin} />
+                ? <CustomerList customers={customers} onSelectCustomer={(c) => { setSelectedCustomerPhone(c.phone); setCustomerViewMode('detail'); }} onAddCustomer={() => { setEditingCustomer(null); setIsCustomerModalOpen(true); }} onDeleteCustomer={hasPermission('customer.delete') ? handleDeleteCustomer : undefined} />
+                : selectedCustomer && <CustomerDetailView customer={selectedCustomer} sales={sales} statuses={statuses} cskhItems={cskhItems.filter(item => item.customerPhone === selectedCustomer.phone)} relationships={relationships} onClose={() => { setCustomerViewMode('list'); setSelectedCustomerPhone(null); }} onSelectLead={setSelectedLead} onUpdateCustomer={handleUpdateCustomer} onEdit={(c) => { setEditingCustomer(c); setIsCustomerModalOpen(true); }} onDelete={hasPermission('customer.delete') ? handleDeleteCustomer : undefined} onAddNote={handleAddNote} currentUser={currentUser} isAdmin={isAdmin} />
           )}
-          {activeView === 'orders' && <OrderList orders={orders} customers={customersData} sales={sales} onAddOrder={() => setIsAddOrderModalOpen(true)} onImportOrders={() => setIsImportOrderModalOpen(true)} onDeleteOrder={isAdmin ? handleDeleteOrder : undefined} />}
+          {activeView === 'orders' && <OrderList orders={orders} customers={customersData} sales={sales} onAddOrder={() => setIsAddOrderModalOpen(true)} onImportOrders={() => setIsImportOrderModalOpen(true)} onDeleteOrder={hasPermission('order.delete') ? handleDeleteOrder : undefined} />}
           {activeView === 'revenue' && <CalendarView leads={leads} onSelectLead={setSelectedLead} />}
           {activeView === 'settings' && (
             <SettingsView 
@@ -986,17 +1018,17 @@ function App() {
                     fetchData(true); setSelectedLead(null);
                 }
             }}
-            onDelete={activeView === 'cskh' 
-                ? () => {
-                    const item = cskhItems.find(i => i.originalLeadId === selectedLead.id) || 
-                                 cskhItems.find(i => `ghost_${i.id}` === selectedLead.id);
-                    if (item) handleDeleteCskh(item.id);
-                    else {
-                        // Fallback: If no cskh item found (weird), try delete lead
-                        handleDeleteLead(selectedLead.id);
-                    }
-                }
-                : () => handleDeleteLead(selectedLead.id)
+            onDelete={
+                activeView === 'cskh' 
+                ? (hasPermission('lead.delete') 
+                    ? () => {
+                        const item = cskhItems.find(i => i.originalLeadId === selectedLead.id) || 
+                                     cskhItems.find(i => `ghost_${i.id}` === selectedLead.id);
+                        if (item) handleDeleteCskh(item.id);
+                        else handleDeleteLead(selectedLead.id);
+                    } 
+                    : undefined)
+                : (hasPermission('lead.delete') ? () => handleDeleteLead(selectedLead.id) : undefined)
             }
             currentUser={currentUser} 
         />
