@@ -231,7 +231,7 @@ function App() {
   };
 
   // --- EFFECT: FETCH DATA ---
-  const fetchData = useCallback(async (force = false) => {
+  const fetchData = useCallback(async (force = false, silent = false) => {
       if (useLocalOnly) {
           setLeads(localLeads);
           setCskhItems(localCskh);
@@ -244,7 +244,7 @@ function App() {
 
       if (!session && !force) return;
 
-      setIsRefreshing(true);
+      if (!silent) setIsRefreshing(true);
       setConnectionError(null);
       
       try {
@@ -366,7 +366,7 @@ function App() {
           console.error('Fetch error:', err);
           setConnectionError(formatErrorMessage(err));
       } finally {
-          setIsRefreshing(false);
+          if (!silent) setIsRefreshing(false);
           setIsLoading(false);
       }
   }, [useLocalOnly, session, localLeads, localCskh, localCustomers, localOrders]);
@@ -375,6 +375,43 @@ function App() {
   useEffect(() => {
       fetchData();
   }, [fetchData]);
+
+  // --- EFFECT: REALTIME SUBSCRIPTION ---
+  useEffect(() => {
+    if (useLocalOnly || !session) return;
+
+    const channel = supabase.channel('db-changes')
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'leads' },
+            () => fetchData(true, true) // Silent refresh on leads change
+        )
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'customers' },
+            () => fetchData(true, true) // Silent refresh on customers change
+        )
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'orders' },
+            () => fetchData(true, true) // Silent refresh on orders change
+        )
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'cskh' },
+            () => fetchData(true, true) // Silent refresh on CSKH change
+        )
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'notes' },
+            () => fetchData(true, true) // Silent refresh on notes change
+        )
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+  }, [useLocalOnly, session, fetchData]);
 
   const selectedCustomer = useMemo(() => customers.find(c => c.phone === selectedCustomerPhone) || null, [customers, selectedCustomerPhone]);
 
@@ -440,7 +477,8 @@ function App() {
               // Update lead updated_at to bring it to top if needed
               await supabase.from('leads').update({ updated_at: new Date().toISOString() }).eq('id', leadId);
 
-              await fetchData(true);
+              // Don't need explicit fetch here as Realtime will catch it, but okay to keep for responsiveness
+              // await fetchData(true); 
           } catch (err: any) {
               alert("Lỗi thêm ghi chú: " + formatErrorMessage(err));
           }
@@ -481,7 +519,7 @@ function App() {
             const { error: custError } = await supabase.from('customers').delete().eq('phone', phone);
             if (custError) throw custError;
 
-            await fetchData(true);
+            // Realtime will auto-refresh
         } else {
             const newLeads = leads.filter(l => l.phone !== phone);
             const newCskh = cskhItems.filter(c => c.customerPhone !== phone);
@@ -532,7 +570,7 @@ function App() {
             await supabase.from('notes').delete().eq('lead_id', leadId);
             const { error: leadError } = await supabase.from('leads').delete().eq('id', leadId);
             if (leadError) throw leadError;
-            await fetchData(true);
+            // Realtime will update
         } else {
             const newLeads = leads.filter(l => l.id !== leadId);
             setLeads(newLeads); setLocalLeads(newLeads);
@@ -566,7 +604,7 @@ function App() {
           if (!useLocalOnly) {
               const { error } = await supabase.from('orders').delete().eq('id', orderId);
               if (error) throw error;
-              await fetchData(true);
+              // Realtime update
           } else {
               const newOrders = orders.filter(o => o.id !== orderId);
               setOrders(newOrders); setLocalOrders(newOrders);
@@ -597,7 +635,7 @@ function App() {
     try {
         const { error } = await supabase.from('leads').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', id);
         if (error) throw error;
-        await fetchData(true);
+        // await fetchData(true); // Let realtime handle it
     } catch(err) { alert(formatErrorMessage(err)); }
   };
 
@@ -693,7 +731,7 @@ function App() {
 
           alert("Đã hoàn thành cơ hội và tạo phiếu CSKH thành công!");
           
-          await fetchData(true);
+          // await fetchData(true); // Let realtime handle it
           // Close detail modal if open
           if (selectedLead?.id === leadToComplete.id) setSelectedLead(null);
 
@@ -715,7 +753,7 @@ function App() {
       try {
           const { error } = await supabase.from('cskh').update({ status: newStatusId, updated_at: new Date().toISOString() }).eq('id', cskhId);
           if (error) throw error;
-          await fetchData(true);
+          // await fetchData(true);
       } catch (err) { alert(formatErrorMessage(err)); }
   };
 
@@ -744,7 +782,7 @@ function App() {
         if (!useLocalOnly) {
             const { error } = await supabase.from('cskh').delete().eq('id', cskhId);
             if (error) throw error;
-            await fetchData(true);
+            // Realtime update
         } else {
             const updated = cskhItems.filter(item => item.id !== cskhId);
             setCskhItems(updated); setLocalCskh(updated);
@@ -771,7 +809,7 @@ function App() {
               const dbData = mapAppCustomerDataToDbCustomer(data);
               const { error } = await supabase.from('customers').update(dbData).eq('phone', phone);
               if (error) throw error;
-              await fetchData(true);
+              // Realtime update
           } catch(err) { alert(formatErrorMessage(err)); }
       } else {
           const updated = { ...customersData, [phone]: { ...customersData[phone], ...data } };
@@ -848,7 +886,7 @@ function App() {
                 onAddLead={() => setIsAddModalOpen(true)} 
                 onAcceptLead={async (id) => {
                     const { error } = await supabase.from('leads').update({ assigned_to: currentUser, status: 'contacting' }).eq('id', id);
-                    if (!error) fetchData(true);
+                    if (!error) { /* Realtime handles fetch */ }
                     else alert(formatErrorMessage(error));
                 }}
                 onDeleteLead={hasPermission('lead.delete') ? handleDeleteLead : undefined}
@@ -973,7 +1011,7 @@ function App() {
                   projected_appointment_date: data.projectedAppointmentDate, 
                   appointment_date: data.appointmentDate
               }]);
-              if (!error) { setIsAddModalOpen(false); fetchData(true); } else { alert(formatErrorMessage(error)); }
+              if (!error) { setIsAddModalOpen(false); /* Fetch handled by realtime */ } else { alert(formatErrorMessage(error)); }
           }
       }} />}
       
@@ -1028,7 +1066,8 @@ function App() {
                         }).eq('original_lead_id', updatedLead.id);
                     }
 
-                    fetchData(true); setSelectedLead(null);
+                    // fetchData(true); // Handled by realtime
+                    setSelectedLead(null);
                 }
             }}
             onDelete={
@@ -1050,7 +1089,7 @@ function App() {
       {isCustomerModalOpen && <CustomerFormModal customerToEdit={editingCustomer} relationships={relationships} customerGroups={customerGroups} onClose={() => setIsCustomerModalOpen(false)} onSave={async (data) => {
           const dbData = mapAppCustomerDataToDbCustomer(data);
           const { error } = await supabase.from('customers').upsert(dbData, { onConflict: 'phone' });
-          if(error) alert(formatErrorMessage(error)); else { setIsCustomerModalOpen(false); fetchData(true); }
+          if(error) alert(formatErrorMessage(error)); else { setIsCustomerModalOpen(false); /* fetch by realtime */ }
       }} />}
       
       {isAddOrderModalOpen && <AddOrderModal sales={sales} customers={customers} onClose={() => setIsAddOrderModalOpen(false)} onSave={async (data) => {
@@ -1061,7 +1100,7 @@ function App() {
                    if (cErr) { alert(formatErrorMessage(cErr)); return; }
               }
               const { error } = await supabase.from('orders').insert([{ customer_phone: data.customerPhone, service: data.service, revenue: data.revenue, assigned_to: data.assignedTo || null, created_at: data.createdAt ? new Date(data.createdAt).toISOString() : new Date().toISOString(), status: data.status, source: data.source }]);
-              if (error) alert(formatErrorMessage(error)); else { setIsAddOrderModalOpen(false); fetchData(true); }
+              if (error) alert(formatErrorMessage(error)); else { setIsAddOrderModalOpen(false); /* fetch by realtime */ }
           }
       }} />}
 
@@ -1113,7 +1152,7 @@ function App() {
                    }
                    const dbOrders = importedData.map(o => ({ external_id: o.externalId, customer_phone: o.customerPhone, service: o.service, revenue: o.revenue, status: o.status, source: o.source, created_at: o.createdAt }));
                    const { error } = await supabase.from('orders').insert(dbOrders);
-                   if (error) alert("Lỗi import đơn hàng: " + formatErrorMessage(error)); else { alert(`Đã import thành công ${importedData.length} đơn hàng.`); fetchData(true); }
+                   if (error) alert("Lỗi import đơn hàng: " + formatErrorMessage(error)); else { alert(`Đã import thành công ${importedData.length} đơn hàng.`); /* fetch by realtime */ }
                } catch (err) { alert("Có lỗi xảy ra khi import: " + formatErrorMessage(err)); } finally { setIsRefreshing(false); }
            }
       }} />}
