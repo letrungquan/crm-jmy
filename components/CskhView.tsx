@@ -1,24 +1,26 @@
+
 import React from 'react';
-import { Lead, StatusConfig } from '../types';
+import { CskhItem, StatusConfig } from '../types';
 import CskhCard from './CskhCard';
 
 interface CskhViewProps {
-  leads: Lead[];
+  cskhItems: CskhItem[];
   statuses: StatusConfig[];
-  onSelectLead: (lead: Lead) => void;
-  onUpdateLeadCskhStatus: (leadId: string, newStatusId: string) => void;
+  onUpdateCskhStatus: (cskhId: string, newStatusId: string) => void;
+  onDeleteCskh: (cskhId: string) => void;
   onCustomizeStatuses: () => void;
+  onSelectCskh: (item: CskhItem) => void;
 }
 
-const CskhView: React.FC<CskhViewProps> = ({ leads, statuses, onSelectLead, onUpdateLeadCskhStatus, onCustomizeStatuses }) => {
+const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhStatus, onDeleteCskh, onCustomizeStatuses, onSelectCskh }) => {
   const [draggedOverColumn, setDraggedOverColumn] = React.useState<string | null>(null);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, statusId: string) => {
     e.preventDefault();
     setDraggedOverColumn(null);
-    const leadId = e.dataTransfer.getData('leadId');
-    if (leadId) {
-      onUpdateLeadCskhStatus(leadId, statusId);
+    const cskhId = e.dataTransfer.getData('cskhId');
+    if (cskhId) {
+      onUpdateCskhStatus(cskhId, statusId);
     }
   };
 
@@ -55,7 +57,7 @@ const CskhView: React.FC<CskhViewProps> = ({ leads, statuses, onSelectLead, onUp
       </div>
       <div className="flex-1 flex overflow-x-auto p-2 sm:p-4 space-x-2 sm:space-x-4">
         {statuses.map(statusConfig => {
-          const leadsInStatus = leads.filter(lead => (lead.cskhStatus || defaultStatusId) === statusConfig.id);
+          const itemsInStatus = cskhItems.filter(item => (item.status || defaultStatusId) === statusConfig.id);
           const statusTheme = statusConfig.color;
           
           return (
@@ -69,20 +71,21 @@ const CskhView: React.FC<CskhViewProps> = ({ leads, statuses, onSelectLead, onUp
               <div className={`flex items-center justify-between p-3 rounded-t-xl ${statusTheme.bg}`}>
                   <div className="flex items-center">
                       <span className={`text-sm font-bold ${statusTheme.text}`}>{statusConfig.name}</span>
-                      <span className="ml-2 text-xs font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full">{leadsInStatus.length}</span>
+                      <span className="ml-2 text-xs font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full">{itemsInStatus.length}</span>
                   </div>
               </div>
 
               <div className={`p-2 space-y-3 overflow-y-auto flex-1 ${statusTheme.bg} bg-opacity-50`}>
-                {leadsInStatus.map(lead => (
+                {itemsInStatus.map(item => (
                     <CskhCard
-                      key={lead.id}
-                      lead={lead}
-                      onClick={() => onSelectLead(lead)}
+                      key={item.id}
+                      item={item}
                       statusConfig={statusConfig}
+                      onDelete={onDeleteCskh}
+                      onClick={() => onSelectCskh(item)}
                     />
                 ))}
-                 {leadsInStatus.length === 0 && (
+                 {itemsInStatus.length === 0 && (
                      <div className="p-4 text-center text-sm text-slate-500">
                         Không có khách hàng.
                     </div>

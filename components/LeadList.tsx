@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Lead, Sale } from '../types';
 import LeadCard from './LeadCard';
@@ -9,6 +10,7 @@ interface LeadListProps {
   sources?: string[];
   selectedSource?: string;
   onSourceChange?: (source: string) => void;
+  onDeleteLead?: (leadId: string) => void;
 }
 
 const LeadList: React.FC<LeadListProps> = ({ 
@@ -17,7 +19,8 @@ const LeadList: React.FC<LeadListProps> = ({
   onSelectLead,
   sources,
   selectedSource,
-  onSourceChange
+  onSourceChange,
+  onDeleteLead
 }) => {
   const showFilter = sources && typeof selectedSource !== 'undefined' && onSourceChange;
 
@@ -64,6 +67,7 @@ const LeadList: React.FC<LeadListProps> = ({
             lead={lead}
             salesperson={sales.find(s => s.id === lead.assignedTo)}
             onClick={() => onSelectLead(lead)}
+            onDelete={onDeleteLead ? () => onDeleteLead(lead.id) : undefined}
           />
         ))}
       </div>

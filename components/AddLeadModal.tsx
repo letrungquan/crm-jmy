@@ -1,24 +1,23 @@
+
 import React, { useState } from 'react';
 import { Lead, Sale, Customer } from '../types';
 
 interface AddLeadModalProps {
   sales: Sale[];
   customers: Customer[];
+  sources: string[];
   onClose: () => void;
   onSave: (newLeadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'notes'>) => void;
   defaultStatus?: string;
 }
 
-const PREDEFINED_SOURCES = ['Facebook', 'Google', 'Website', 'Zalo', 'Tiktok - Ny Skinlab', 'TikTok - Đẹp Cùng Ny'];
-
-const AddLeadModal: React.FC<AddLeadModalProps> = ({ sales, customers, onClose, onSave, defaultStatus }) => {
+const AddLeadModal: React.FC<AddLeadModalProps> = ({ sales, customers, sources, onClose, onSave, defaultStatus }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [service, setService] = useState('');
   const [description, setDescription] = useState('');
   const [potentialRevenue, setPotentialRevenue] = useState('');
   const [selectedSource, setSelectedSource] = useState('');
-  const [customSource, setCustomSource] = useState('');
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [projectedAppointmentDate, setProjectedAppointmentDate] = useState('');
 
@@ -64,12 +63,10 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ sales, customers, onClose, 
         return;
     }
     
-    const finalSource = selectedSource === 'custom' ? customSource : selectedSource;
-
     onSave({
       name,
       phone,
-      source: finalSource,
+      source: selectedSource,
       assignedTo,
       status: defaultStatus || 'new',
       appointmentDate: null,
@@ -162,7 +159,20 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ sales, customers, onClose, 
             {defaultStatus === 'contacting' && (
                 <div>
                   <label htmlFor="projectedAppointmentDate" className="block text-sm font-medium text-slate-700">Ngày dự thu</label>
-                  <input type="date" id="projectedAppointmentDate" value={projectedAppointmentDate} onChange={(e) => setProjectedAppointmentDate(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"/>
+                  <input 
+                    type="date" 
+                    id="projectedAppointmentDate" 
+                    value={projectedAppointmentDate} 
+                    onChange={(e) => setProjectedAppointmentDate(e.target.value)} 
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch (err) {
+                        // showPicker might fail in restricted iframes, simply ignore
+                      }
+                    }}
+                    className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 cursor-pointer"
+                  />
                 </div>
             )}
              <div>
@@ -178,24 +188,9 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ sales, customers, onClose, 
                 className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
               >
                 <option value="">Chọn nguồn</option>
-                {PREDEFINED_SOURCES.map(src => <option key={src} value={src}>{src}</option>)}
-                <option value="custom">Khác (Nhập thủ công)</option>
+                {sources.map(src => <option key={src} value={src}>{src}</option>)}
               </select>
             </div>
-            {selectedSource === 'custom' && (
-              <div>
-                <label htmlFor="customSource" className="sr-only">Nguồn tùy chỉnh</label>
-                <input 
-                  type="text" 
-                  id="customSource" 
-                  value={customSource} 
-                  onChange={(e) => setCustomSource(e.target.value)} 
-                  placeholder="Nhập nguồn khác"
-                  required
-                  className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
-                />
-              </div>
-            )}
             <div>
               <label htmlFor="assignedTo" className="block text-sm font-medium text-slate-700">Gán cho Sale</label>
               <select id="assignedTo" value={assignedTo || ''} onChange={(e) => setAssignedTo(e.target.value || null)} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900">

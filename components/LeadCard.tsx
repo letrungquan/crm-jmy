@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Lead, Sale, StatusConfig } from '../types';
 
@@ -6,19 +7,37 @@ interface LeadCardProps {
   salesperson?: Sale;
   onClick: () => void;
   statusConfig?: StatusConfig;
+  onDelete?: () => void;
 }
 
-const LeadCard: React.FC<LeadCardProps> = ({ lead, salesperson, onClick, statusConfig }) => {
+const LeadCard: React.FC<LeadCardProps> = ({ lead, salesperson, onClick, statusConfig, onDelete }) => {
   // FIX: Use the passed statusConfig for dynamic colors and names, with a fallback for safety.
   const statusTheme = statusConfig?.color || { bg: 'bg-gray-100', text: 'text-gray-800' };
   const statusName = statusConfig?.name || lead.status;
 
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onDelete) onDelete();
+  };
+
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-lg shadow p-4 cursor-pointer transition-all hover:shadow-lg hover:ring-2 hover:ring-blue-500"
+      className="bg-white rounded-lg shadow p-4 cursor-pointer transition-all hover:shadow-lg hover:ring-2 hover:ring-blue-500 relative group"
     >
-      <div className="flex justify-between items-start">
+      {onDelete && (
+        <button 
+            onClick={handleDeleteClick}
+            className="absolute top-2 right-2 p-1.5 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity border border-slate-100 z-10"
+            title="Xóa cơ hội"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </button>
+      )}
+
+      <div className="flex justify-between items-start pr-8">
         <div>
           <h3 className="text-lg font-bold text-slate-800">{lead.name}</h3>
           <p className="text-sm text-slate-500 flex items-center mt-1">

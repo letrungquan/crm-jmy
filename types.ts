@@ -1,3 +1,4 @@
+
 export interface StatusConfig {
   id: string;
   name: string;
@@ -16,9 +17,25 @@ export interface Note {
   createdBy?: Sale['id'];
 }
 
+// Permission strings: "resource.action"
+export type Permission = 
+  | 'lead.view' | 'lead.create' | 'lead.edit' | 'lead.delete' | 'lead.import'
+  | 'customer.view' | 'customer.create' | 'customer.edit' | 'customer.delete'
+  | 'order.view' | 'order.create' | 'order.edit' | 'order.delete'
+  | 'settings.access' | 'user.manage';
+
+export interface RoleDefinition {
+  id: string;
+  name: string;
+  permissions: Permission[];
+  isSystem?: boolean; // Cannot be deleted if true (e.g., admin)
+  description?: string;
+}
+
 export interface Sale {
   id: string;
   name: string;
+  role: string; // References RoleDefinition.id
 }
 
 export interface Lead {
@@ -28,6 +45,7 @@ export interface Lead {
   source: string;
   assignedTo: Sale['id'] | null;
   status: string; // ID of the StatusConfig
+  cskhStatus?: string; // Optional CSKH status
   notes: Note[];
   createdAt: string;
   updatedAt: string;
@@ -37,7 +55,31 @@ export interface Lead {
   description: string;
   priority: number | null;
   potentialRevenue: number | null;
-  cskhStatus?: string;
+}
+
+export interface CskhItem {
+  id: string;
+  customerPhone: string;
+  customerName: string;
+  service: string;
+  status: string; // cskh_pending, etc.
+  assignedTo: Sale['id'] | null;
+  originalLeadId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Order {
+  id: string;
+  customerPhone: string;
+  service: string; // Tên dịch vụ/Sản phẩm
+  revenue: number;
+  createdAt: string;
+  status: 'completed' | 'cancelled' | 'pending';
+  assignedTo?: string; // Sale ID
+  externalId?: string; // Mã đơn từ KiotViet
+  source?: 'manual' | 'kiotviet' | 'import';
+  customerName?: string;
 }
 
 export interface CustomerData {
@@ -49,20 +91,72 @@ export interface CustomerData {
   relationshipStatus?: string;
   assignedTo?: Sale['id'];
   email?: string;
-  taxCode?: string;
   address?: string;
-  businessIndustry?: string;
   customerGroup?: string;
-  website?: string;
   source?: string;
   creator?: string;
   profileCreatedAt?: string;
   profileCompleteness?: number;
+  gender?: string;
+  dateOfBirth?: string;
+  occupation?: string;
+  
+  // Address Details
+  province?: string;
+  district?: string;
+  ward?: string;
+
+  // Marketing & Tracking Fields
+  ip?: string;
+  userAgent?: string;
+  fbp?: string;     // Facebook Browser ID
+  fbc?: string;     // Facebook Click ID
+  ttclid?: string;  // TikTok Click ID
+  ttp?: string;     // TikTok Pixel Cookie
+  sourceUrl?: string;
+  eventId?: string;
+  externalId?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  submittedAt?: string;
 }
 
-export interface Customer extends CustomerData {
+export interface Customer {
     name: string;
     leads: Lead[];
+    orders: Order[];
+    // Include all fields from CustomerData
+    phone: string;
+    generalNotes: string;
+    tags: string[];
+    location?: string;
+    relationshipStatus?: string;
+    assignedTo?: Sale['id'];
+    email?: string;
+    address?: string;
+    customerGroup?: string;
+    source?: string;
+    creator?: string;
+    profileCreatedAt?: string;
+    profileCompleteness?: number;
+    gender?: string;
+    dateOfBirth?: string;
+    occupation?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
+    ip?: string;
+    userAgent?: string;
+    fbp?: string;
+    fbc?: string;
+    ttclid?: string;
+    ttp?: string;
+    sourceUrl?: string;
+    eventId?: string;
+    externalId?: string;
+    utmSource?: string;
+    utmMedium?: string;
+    submittedAt?: string;
 }
 
-export type AppView = 'dashboard' | 'sales' | 'cskh' | 'customers' | 'revenue' | 'hr' | 'guide';
+export type AppView = 'dashboard' | 'sales' | 'cskh' | 'customers' | 'orders' | 'revenue' | 'hr' | 'settings';

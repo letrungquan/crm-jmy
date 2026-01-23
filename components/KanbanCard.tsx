@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Lead, Sale } from '../types';
 
@@ -6,9 +7,10 @@ interface KanbanCardProps {
   salesperson?: Sale;
   onClick: () => void;
   onAcceptLead: (leadId: string) => void;
+  onDelete?: () => void;
 }
 
-const KanbanCard: React.FC<KanbanCardProps> = ({ lead, salesperson, onClick, onAcceptLead }) => {
+const KanbanCard: React.FC<KanbanCardProps> = ({ lead, salesperson, onClick, onAcceptLead, onDelete }) => {
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('leadId', lead.id);
   };
@@ -16,6 +18,11 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ lead, salesperson, onClick, onA
   const handleAcceptClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onAcceptLead(lead.id);
+  };
+  
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onDelete) onDelete();
   };
   
   const formattedDate = lead.appointmentDate 
@@ -68,10 +75,22 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ lead, salesperson, onClick, onA
       draggable="true"
       onDragStart={handleDragStart}
       onClick={onClick}
-      className="bg-white rounded-lg p-3 shadow-sm cursor-pointer border border-transparent hover:border-blue-500 group"
+      className="bg-white rounded-lg p-3 shadow-sm cursor-pointer border border-transparent hover:border-blue-500 group relative"
     >
+      {onDelete && (
+        <button 
+            onClick={handleDeleteClick}
+            className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity border border-slate-100 z-10"
+            title="Xóa cơ hội"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </button>
+      )}
+
       <div className="flex justify-between items-start">
-        <h4 className="font-semibold text-sm text-slate-900 pr-2 flex-1">{lead.name}</h4>
+        <h4 className="font-semibold text-sm text-slate-900 pr-6 flex-1">{lead.name}</h4>
          <div className="flex items-center space-x-2 flex-shrink-0">
              {stalenessIndicator()}
          </div>

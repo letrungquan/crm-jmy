@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Customer, Sale, StatusConfig, Lead } from '../types';
 
@@ -202,11 +201,8 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                 <InfoField label="Tên khách hàng" value={`ĐL. ${customer.name.toUpperCase()} - ${customer.location}`} />
                                 <InfoField label="Email" value={customer.email} />
                                 <InfoField label="Điện thoại" value={customer.phone} />
-                                <InfoField label="Mã số thuế" value={customer.taxCode} />
                                 <InfoField label="Địa chỉ" value={customer.address} />
-                                <InfoField label="Ngành kinh doanh" value={customer.businessIndustry} />
                                 <InfoField label="Nhóm khách hàng" value={customer.customerGroup} />
-                                <InfoField label="Website" value={customer.website} />
                            </div>
                        </CollapsibleSection>
                     </div>

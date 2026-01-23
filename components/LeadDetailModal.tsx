@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Lead, Sale, Note, StatusConfig } from '../types';
 
@@ -9,12 +10,18 @@ interface LeadDetailModalProps {
   context?: 'sales' | 'cskh';
   onClose: () => void;
   onSave: (updatedLead: Lead) => void;
+  onDelete?: () => void;
   currentUser: Sale['id'];
 }
 
-const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses, cskhStatuses, context = 'sales', onClose, onSave, currentUser }) => {
+const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses, cskhStatuses, context = 'sales', onClose, onSave, onDelete, currentUser }) => {
   const [currentLead, setCurrentLead] = useState<Lead>(lead);
   const [newNote, setNewNote] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Feedback state
+  const [isFeedback, setIsFeedback] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(5);
 
   useEffect(() => {
     setCurrentLead(lead);
@@ -25,19 +32,36 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
   const isContactingStatus = currentLead.status === 'contacting';
 
   const handleSave = () => {
+    // Ensure dates are valid ISO strings if needed, but Supabase handles timestamp inputs flexibly.
+    // We pass currentLead as is.
     onSave(currentLead);
   };
   
+  const handleDelete = async () => {
+      if (!onDelete) return;
+      setIsDeleting(true);
+      await onDelete(); // Calls parent async function
+      setIsDeleting(false); // Reset loading state immediately after parent finishes (success or error)
+  }
+  
   const handleAddNote = () => {
     if (newNote.trim() === '') return;
+    
+    let finalContent = newNote.trim();
+    if (isFeedback) {
+        finalContent = `[PHẢN HỒI] [${feedbackRating} Sao] ${finalContent}`;
+    }
+
     const note: Note = {
       id: `note_${Date.now()}`,
-      content: newNote.trim(),
+      content: finalContent,
       createdAt: new Date().toISOString(),
       createdBy: currentUser,
     };
     setCurrentLead(prev => ({ ...prev, notes: [note, ...prev.notes], updatedAt: new Date().toISOString() }));
     setNewNote('');
+    setIsFeedback(false);
+    setFeedbackRating(5);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -50,6 +74,22 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
     } else {
       setCurrentLead(prev => ({...prev, [name]: value}));
     }
+  };
+
+  // Helper to format date for datetime-local input (YYYY-MM-DDTHH:mm)
+  const formatForDateTimeInput = (dateString: string | null) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    
+    const pad = (num: number) => num.toString().padStart(2, '0');
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   return (
@@ -137,9 +177,16 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
                    <input
                     type="datetime-local"
                     name="appointmentDate"
-                    value={currentLead.appointmentDate || ''}
+                    value={formatForDateTimeInput(currentLead.appointmentDate)}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch (err) {
+                        // showPicker might fail in restricted iframes, simply ignore
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 cursor-pointer"
                   />
                 </div>
               )}
@@ -152,7 +199,14 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
                       name="projectedAppointmentDate"
                       value={currentLead.projectedAppointmentDate ? currentLead.projectedAppointmentDate.split('T')[0] : ''}
                       onChange={handleInputChange}
-                      className="w-full pl-3 pr-10 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                      onClick={(e) => {
+                        try {
+                          (e.target as any).showPicker?.();
+                        } catch (err) {
+                          // showPicker might fail in restricted iframes, simply ignore
+                        }
+                      }}
+                      className="w-full pl-3 pr-10 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 cursor-pointer"
                     />
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -205,29 +259,75 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
           <div className="mt-6">
             <h3 className="text-lg font-semibold text-slate-700 mb-2">Lịch sử tương tác</h3>
             <div className="space-y-3">
-               <div className="flex space-x-2">
-                 <textarea
-                   value={newNote}
-                   onChange={(e) => setNewNote(e.target.value)}
-                   placeholder="Thêm ghi chú mới..."
-                   rows={2}
-                   className="flex-grow px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
-                 ></textarea>
-                 <button onClick={handleAddNote} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300" disabled={!newNote.trim()}>
-                    Thêm
-                 </button>
+               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                   <div className="flex items-center justify-between mb-2">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                checked={isFeedback} 
+                                onChange={(e) => setIsFeedback(e.target.checked)}
+                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-bold text-slate-700">Ghi nhận phản hồi</span>
+                        </label>
+                        {isFeedback && (
+                            <div className="flex space-x-1">
+                                {[1, 2, 3, 4, 5].map(star => (
+                                    <button key={star} onClick={() => setFeedbackRating(star)} className="focus:outline-none" type="button">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${star <= feedbackRating ? 'text-yellow-400' : 'text-slate-300'}`} viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                        </svg>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                   </div>
+                   <div className="flex space-x-2">
+                     <textarea
+                       value={newNote}
+                       onChange={(e) => setNewNote(e.target.value)}
+                       placeholder={isFeedback ? "Nhập nội dung phản hồi của khách hàng..." : "Thêm ghi chú tương tác..."}
+                       rows={2}
+                       className="flex-grow px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                     ></textarea>
+                     <button onClick={handleAddNote} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 font-bold" disabled={!newNote.trim()}>
+                        Gửi
+                     </button>
+                   </div>
                </div>
+
               <div className="max-h-60 overflow-y-auto space-y-3 pr-2">
                  {currentLead.notes.length > 0 ? (
                     currentLead.notes.map(note => {
                       const creator = sales.find(s => s.id === note.createdBy);
+                      const isFeedbackNote = note.content.includes('[PHẢN HỒI]');
+                      let displayContent = note.content;
+                      let rating = 0;
+                      
+                      if (isFeedbackNote) {
+                          const parts = note.content.match(/\[(\d+) Sao\] (.*)/);
+                          if (parts) {
+                              rating = parseInt(parts[1]);
+                              displayContent = parts[2];
+                          } else {
+                              displayContent = note.content.replace('[PHẢN HỒI]', '');
+                          }
+                      }
+
                       return (
-                      <div key={note.id} className="bg-white p-3 rounded-md border border-slate-200">
+                      <div key={note.id} className={`p-3 rounded-md border ${isFeedbackNote ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-slate-200'}`}>
                         <div className="flex justify-between items-center text-xs mb-1">
                           <span className="font-semibold text-slate-800">{creator?.name || 'Hệ thống'}</span>
                           <span className="text-slate-400">{new Date(note.createdAt).toLocaleString('vi-VN')}</span>
                         </div>
-                        <p className="text-sm text-slate-700">{note.content}</p>
+                        {isFeedbackNote && rating > 0 && (
+                            <div className="flex text-yellow-400 mb-1">
+                                {[...Array(rating)].map((_, i) => (
+                                    <svg key={i} xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                                ))}
+                            </div>
+                        )}
+                        <p className={`text-sm ${isFeedbackNote ? 'text-slate-800 italic' : 'text-slate-700'}`}>{displayContent}</p>
                       </div>
                     )})
                  ) : (
@@ -238,13 +338,26 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
           </div>
         </div>
 
-        <footer className="p-4 bg-slate-100 border-t border-slate-200 flex justify-end space-x-3">
-          <button onClick={onClose} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50">
-            Huỷ
-          </button>
-          <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-            Lưu thay đổi
-          </button>
+        <footer className="p-4 bg-slate-100 border-t border-slate-200 flex justify-between items-center">
+          <div>
+            {onDelete && (
+                <button 
+                  onClick={handleDelete} 
+                  disabled={isDeleting}
+                  className={`px-4 py-2 bg-white border border-red-200 text-red-600 rounded-md text-sm font-medium ${isDeleting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-50'}`}
+                >
+                    {isDeleting ? 'Đang xóa...' : 'Xóa'}
+                </button>
+            )}
+          </div>
+          <div className="flex space-x-3">
+            <button onClick={onClose} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50">
+                Huỷ
+            </button>
+            <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                Lưu thay đổi
+            </button>
+          </div>
         </footer>
       </div>
     </div>

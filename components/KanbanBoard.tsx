@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Lead, Sale, StatusConfig } from '../types';
 import KanbanCard from './KanbanCard';
@@ -10,6 +11,7 @@ interface KanbanBoardProps {
   onUpdateLeadStatus: (leadId: string, newStatusId: string) => void;
   onAddLead: (statusId: string) => void;
   onAcceptLead: (leadId: string) => void;
+  onDeleteLead?: (leadId: string) => void;
   sources: string[];
   selectedSource: string;
   onSourceChange: (source: string) => void;
@@ -26,6 +28,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onUpdateLeadStatus, 
   onAddLead, 
   onAcceptLead,
+  onDeleteLead,
   sources,
   selectedSource,
   onSourceChange,
@@ -134,6 +137,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       salesperson={salesperson}
                       onClick={() => onSelectLead(lead)}
                       onAcceptLead={onAcceptLead}
+                      onDelete={onDeleteLead ? () => onDeleteLead(lead.id) : undefined}
                     />
                   );
                 })}
