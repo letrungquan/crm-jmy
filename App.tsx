@@ -76,7 +76,7 @@ const DEFAULT_ROLES: RoleDefinition[] = [
         id: 'admin', 
         name: 'Quản trị viên', 
         isSystem: true, 
-        permissions: ['lead.view', 'lead.create', 'lead.edit', 'lead.delete', 'lead.import', 'customer.view', 'customer.create', 'customer.edit', 'customer.delete', 'order.view', 'order.create', 'order.edit', 'order.delete', 'settings.access', 'user.manage'],
+        permissions: ['lead.view', 'lead.create', 'lead.edit', 'lead.delete', 'lead.import', 'customer.view', 'customer.create', 'customer.edit', 'customer.delete', 'order.view', 'order.create', 'order.edit', 'order.delete', 'order.import', 'settings.access', 'user.manage'],
         description: 'Toàn quyền hệ thống'
     },
     { 
@@ -497,6 +497,95 @@ function App() {
           } catch (err: any) {
               alert("Lỗi thêm ghi chú: " + formatErrorMessage(err));
           }
+      }
+  };
+
+  const handleBulkDeleteCustomers = (phones: string[]) => {
+      if (!hasPermission('customer.delete')) {
+          alert("BẠN KHÔNG CÓ QUYỀN XÓA KHÁCH HÀNG.");
+          return;
+      }
+      if (phones.length === 0) return;
+
+      setConfirmModal({
+          isOpen: true,
+          title: `XÓA ${phones.length} KHÁCH HÀNG`,
+          message: `Bạn sắp xóa vĩnh viễn ${phones.length} khách hàng đã chọn.\n\nTất cả dữ liệu liên quan (cơ hội, đơn hàng, ghi chú) cũng sẽ bị xóa. Hành động này không thể hoàn tác.`,
+          isDangerous: true,
+          onConfirm: () => executeBulkDeleteCustomers(phones)
+      });
+  };
+
+  const executeBulkDeleteCustomers = async (phones: string[]) => {
+      closeConfirmModal();
+      setIsRefreshing(true);
+      try {
+          if (!useLocalOnly) {
+              // 1. Get related lead IDs to delete notes
+              const { data: leadData } = await supabase.from('leads').select('id').in('phone', phones);
+              const leadIds = leadData?.map(l => l.id) || [];
+              
+              if (leadIds.length > 0) {
+                  await supabase.from('notes').delete().in('lead_id', leadIds);
+              }
+              
+              await supabase.from('cskh').delete().in('customer_phone', phones);
+              await supabase.from('leads').delete().in('phone', phones);
+              await supabase.from('orders').delete().in('customer_phone', phones);
+              
+              const { error } = await supabase.from('customers').delete().in('phone', phones);
+              if (error) throw error;
+          } else {
+              // Offline mode logic
+              const newLeads = leads.filter(l => !phones.includes(l.phone));
+              const newCskh = cskhItems.filter(c => !phones.includes(c.customerPhone));
+              const newOrders = orders.filter(o => !phones.includes(o.customerPhone));
+              const newCustomers = { ...customersData };
+              phones.forEach(p => delete newCustomers[p]);
+              
+              setLeads(newLeads); setLocalLeads(newLeads);
+              setCskhItems(newCskh); setLocalCskh(newCskh);
+              setOrders(newOrders); setLocalOrders(newOrders);
+              setCustomersData(newCustomers); setLocalCustomers(newCustomers);
+          }
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      } finally {
+          setIsRefreshing(false);
+      }
+  };
+
+  const handleBulkDeleteOrders = (orderIds: string[]) => {
+      if (!hasPermission('order.delete')) {
+          alert("BẠN KHÔNG CÓ QUYỀN XÓA ĐƠN HÀNG.");
+          return;
+      }
+      if (orderIds.length === 0) return;
+
+      setConfirmModal({
+          isOpen: true,
+          title: `XÓA ${orderIds.length} ĐƠN HÀNG`,
+          message: `Bạn có chắc chắn muốn xóa ${orderIds.length} đơn hàng đã chọn? Hành động này không thể hoàn tác.`,
+          isDangerous: true,
+          onConfirm: () => executeBulkDeleteOrders(orderIds)
+      });
+  };
+
+  const executeBulkDeleteOrders = async (orderIds: string[]) => {
+      closeConfirmModal();
+      setIsRefreshing(true);
+      try {
+          if (!useLocalOnly) {
+              const { error } = await supabase.from('orders').delete().in('id', orderIds);
+              if (error) throw error;
+          } else {
+              const newOrders = orders.filter(o => !orderIds.includes(o.id));
+              setOrders(newOrders); setLocalOrders(newOrders);
+          }
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      } finally {
+          setIsRefreshing(false);
       }
   };
 
@@ -946,10 +1035,36 @@ function App() {
           )}
           {activeView === 'customers' && (
             customerViewMode === 'list' 
-                ? <CustomerList customers={customers} onSelectCustomer={(c) => { setSelectedCustomerPhone(c.phone); setCustomerViewMode('detail'); }} onAddCustomer={() => { setEditingCustomer(null); setIsCustomerModalOpen(true); }} onDeleteCustomer={hasPermission('customer.delete') ? handleDeleteCustomer : undefined} />
+                ? <CustomerList 
+                    customers={customers} 
+                    onSelectCustomer={(c) => { setSelectedCustomerPhone(c.phone); setCustomerViewMode('detail'); }} 
+                    onAddCustomer={() => { setEditingCustomer(null); setIsCustomerModalOpen(true); }} 
+                    onDeleteCustomer={hasPermission('customer.delete') ? handleDeleteCustomer : undefined} 
+                    onBulkDelete={hasPermission('customer.delete') ? handleBulkDeleteCustomers : undefined}
+                    sources={sources}
+                    relationships={relationships}
+                    customerGroups={customerGroups}
+                  />
                 : selectedCustomer && <CustomerDetailView customer={selectedCustomer} sales={sales} statuses={statuses} cskhItems={cskhItems.filter(item => item.customerPhone === selectedCustomer.phone)} relationships={relationships} onClose={() => { setCustomerViewMode('list'); setSelectedCustomerPhone(null); }} onSelectLead={setSelectedLead} onUpdateCustomer={handleUpdateCustomer} onEdit={(c) => { setEditingCustomer(c); setIsCustomerModalOpen(true); }} onDelete={hasPermission('customer.delete') ? handleDeleteCustomer : undefined} onAddNote={handleAddNote} currentUser={currentUser} isAdmin={isAdmin} />
           )}
-          {activeView === 'orders' && <OrderList orders={orders} customers={customersData} sales={sales} onAddOrder={() => setIsAddOrderModalOpen(true)} onImportOrders={() => setIsImportOrderModalOpen(true)} onDeleteOrder={hasPermission('order.delete') ? handleDeleteOrder : undefined} />}
+          {activeView === 'orders' && (
+            <OrderList 
+                orders={orders} 
+                customers={customersData} 
+                sales={sales} 
+                onAddOrder={() => setIsAddOrderModalOpen(true)} 
+                onImportOrders={() => {
+                    if (hasPermission('order.import')) {
+                        setIsImportOrderModalOpen(true);
+                    } else {
+                        alert("Bạn không có quyền sử dụng tính năng này.");
+                    }
+                }}
+                onDeleteOrder={hasPermission('order.delete') ? handleDeleteOrder : undefined} 
+                canImport={hasPermission('order.import')}
+                onBulkDelete={hasPermission('order.delete') ? handleBulkDeleteOrders : undefined}
+            />
+          )}
           {activeView === 'revenue' && <CalendarView leads={leads} onSelectLead={setSelectedLead} />}
           {activeView === 'settings' && hasPermission('settings.access') && (
             <SettingsView 

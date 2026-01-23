@@ -21,7 +21,7 @@ export interface Note {
 export type Permission = 
   | 'lead.view' | 'lead.create' | 'lead.edit' | 'lead.delete' | 'lead.import'
   | 'customer.view' | 'customer.create' | 'customer.edit' | 'customer.delete'
-  | 'order.view' | 'order.create' | 'order.edit' | 'order.delete'
+  | 'order.view' | 'order.create' | 'order.edit' | 'order.delete' | 'order.import'
   | 'settings.access' | 'user.manage';
 
 export interface RoleDefinition {
@@ -36,6 +36,18 @@ export interface Sale {
   id: string;
   name: string;
   role: string; // References RoleDefinition.id
+  email?: string; // Added for display
+  phone?: string;
+  avatar_url?: string;
+}
+
+export interface AccessLog {
+  id: number;
+  user_id: string;
+  ip: string;
+  user_agent: string;
+  created_at: string;
+  location?: string; // Optional geo-location based on IP
 }
 
 export interface Lead {

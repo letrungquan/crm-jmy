@@ -51,6 +51,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
   });
 
   const [showTracking, setShowTracking] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   
   // State cho địa chỉ Việt Nam
   const [provinces, setProvinces] = useState<AddressUnit[]>([]);
@@ -297,14 +298,42 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear error when user types
+    if (errors[name]) {
+        setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors[name];
+            return newErrors;
+        });
+    }
+  };
+
+  const validateForm = () => {
+      const newErrors: Record<string, string> = {};
+      
+      if (!formData.name.trim()) {
+          newErrors.name = 'Tên khách hàng là bắt buộc.';
+      }
+
+      if (!formData.phone.trim()) {
+          newErrors.phone = 'Số điện thoại là bắt buộc.';
+      } else if (!/^[0-9\+\-\s]{10,15}$/.test(formData.phone)) {
+           newErrors.phone = 'Số điện thoại không hợp lệ (cần 10-11 số).';
+      }
+
+      if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+          newErrors.email = 'Email không đúng định dạng.';
+      }
+
+      setErrors(newErrors);
+      return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.phone) {
-      alert("Tên và Số điện thoại là bắt buộc.");
-      return;
-    }
+    
+    if (!validateForm()) return;
+
     let filledFields = 0;
     const totalFields = 9;
     if(formData.name) filledFields++;
@@ -346,11 +375,28 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-slate-700">Tên khách hàng *</label>
-                  <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"/>
+                  <input 
+                    type="text" 
+                    name="name" 
+                    id="name" 
+                    value={formData.name} 
+                    onChange={handleChange} 
+                    className={`mt-1 block w-full px-3 py-2 bg-white border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${errors.name ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300'}`}
+                  />
+                  {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
                 </div>
                 <div>
                   <label htmlFor="phone" className="block text-sm font-medium text-slate-700">Số điện thoại *</label>
-                  <input type="tel" name="phone" id="phone" value={formData.phone} onChange={handleChange} required disabled={isEditMode} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100"/>
+                  <input 
+                    type="tel" 
+                    name="phone" 
+                    id="phone" 
+                    value={formData.phone} 
+                    onChange={handleChange} 
+                    disabled={isEditMode} 
+                    className={`mt-1 block w-full px-3 py-2 bg-white border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 ${errors.phone ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300'}`}
+                  />
+                  {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                 </div>
                 <div>
                     <label htmlFor="relationshipStatus" className="block text-sm font-medium text-slate-700">Mối quan hệ</label>
@@ -461,7 +507,15 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
 
                  <div className="md:col-span-1">
                   <label htmlFor="email" className="block text-sm font-medium text-slate-700">Email</label>
-                  <input type="email" name="email" id="email" value={formData.email} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"/>
+                  <input 
+                    type="email" 
+                    name="email" 
+                    id="email" 
+                    value={formData.email} 
+                    onChange={handleChange} 
+                    className={`mt-1 block w-full px-3 py-2 bg-white border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${errors.email ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300'}`}
+                  />
+                  {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
                  <div className="md:col-span-2">
                   <label htmlFor="generalNotes" className="block text-sm font-medium text-slate-700">Ghi chú chung</label>

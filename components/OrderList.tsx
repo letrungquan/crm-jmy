@@ -9,6 +9,8 @@ interface OrderListProps {
   onAddOrder: () => void;
   onImportOrders: () => void;
   onDeleteOrder?: (orderId: string) => void;
+  canImport?: boolean;
+  onBulkDelete?: (orderIds: string[]) => void;
 }
 
 const formatCurrency = (value: number) => {
@@ -46,12 +48,13 @@ const SourceBadge = ({ source }: { source?: string }) => {
     return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-teal-100 text-teal-800 border border-teal-200">{source}</span>;
 };
 
-const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOrder, onImportOrders, onDeleteOrder }) => {
+const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOrder, onImportOrders, onDeleteOrder, canImport = false, onBulkDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
 
   // 1. Filter & Search
   const filteredOrders = useMemo(() => {
@@ -91,6 +94,32 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
       return { totalRevenue, count: filteredOrders.length, successCount };
   }, [filteredOrders]);
 
+  // Selection Logic
+  const handleToggleSelect = (id: string) => {
+      const newSelected = new Set(selectedOrderIds);
+      if (newSelected.has(id)) {
+          newSelected.delete(id);
+      } else {
+          newSelected.add(id);
+      }
+      setSelectedOrderIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+      if (selectedOrderIds.size === filteredOrders.length && filteredOrders.length > 0) {
+          setSelectedOrderIds(new Set());
+      } else {
+          setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
+      }
+  };
+
+  const handleBulkAction = () => {
+      if (onBulkDelete) {
+          onBulkDelete(Array.from(selectedOrderIds));
+          setSelectedOrderIds(new Set());
+      }
+  };
+
   return (
     <div className="p-4 sm:p-6 h-full flex flex-col bg-slate-50">
        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -99,15 +128,17 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                 <p className="text-sm text-slate-500 mt-1">Theo dõi doanh thu và trạng thái đơn hàng</p>
             </div>
             <div className="flex items-center space-x-3 w-full sm:w-auto">
-                <button 
-                    onClick={onImportOrders} 
-                    className="flex-1 sm:flex-none flex items-center justify-center h-9 px-4 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-sm"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Import KiotViet
-                </button>
+                {canImport && (
+                    <button 
+                        onClick={onImportOrders} 
+                        className="flex-1 sm:flex-none flex items-center justify-center h-9 px-4 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-sm"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Import KiotViet
+                    </button>
+                )}
                 <button 
                     onClick={onAddOrder} 
                     className="flex-1 sm:flex-none flex items-center justify-center h-9 px-4 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
@@ -175,6 +206,27 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                </select>
            </div>
        </div>
+
+       {/* Bulk Action Bar */}
+       {selectedOrderIds.size > 0 && (
+             <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md flex justify-between items-center animate-fade-in">
+                 <div className="flex items-center space-x-3">
+                     <span className="text-sm font-semibold text-blue-800 ml-2">Đã chọn {selectedOrderIds.size} đơn hàng</span>
+                     <button onClick={() => setSelectedOrderIds(new Set())} className="text-xs text-blue-600 hover:underline">Bỏ chọn</button>
+                 </div>
+                 <div>
+                     {onBulkDelete && (
+                         <button 
+                             onClick={handleBulkAction} 
+                             className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded text-sm font-semibold hover:bg-red-50 shadow-sm flex items-center"
+                         >
+                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                             Xóa {selectedOrderIds.size} đơn
+                         </button>
+                     )}
+                 </div>
+             </div>
+         )}
        
        {/* Table */}
        <div className="bg-white rounded-lg shadow overflow-hidden border border-slate-200 flex-1 flex flex-col">
@@ -182,6 +234,14 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                 <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50">
                         <tr>
+                            <th scope="col" className="px-6 py-3 text-left w-10">
+                                <input 
+                                    type="checkbox" 
+                                    checked={selectedOrderIds.size === filteredOrders.length && filteredOrders.length > 0}
+                                    onChange={handleSelectAll}
+                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                />
+                            </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Mã Đơn</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Khách hàng</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Dịch vụ</th>
@@ -197,8 +257,18 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                         {paginatedOrders.length > 0 ? paginatedOrders.map((order) => {
                             const customer = customers[order.customerPhone];
                             const sale = sales.find(s => s.id === order.assignedTo);
+                            const isSelected = selectedOrderIds.has(order.id);
+                            
                             return (
-                                <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                                <tr key={order.id} className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}>
+                                    <td className="px-6 py-4">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={isSelected}
+                                            onChange={() => handleToggleSelect(order.id)}
+                                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                        />
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
                                         {order.externalId ? (
                                             <span title={`ID Hệ thống: ${order.id}`}>{order.externalId}</span>
@@ -245,7 +315,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                             )
                         }) : (
                             <tr>
-                                <td colSpan={9} className="px-6 py-12 text-center">
+                                <td colSpan={10} className="px-6 py-12 text-center">
                                     <div className="flex flex-col items-center justify-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />

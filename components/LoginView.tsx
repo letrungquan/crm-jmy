@@ -13,6 +13,28 @@ const LoginView: React.FC<LoginViewProps> = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const logAccess = async (userId: string) => {
+      try {
+          // 1. Get Public IP
+          const response = await fetch('https://api.ipify.org?format=json');
+          const data = await response.json();
+          const ip = data.ip;
+          const userAgent = navigator.userAgent;
+
+          // 2. Insert into access_logs
+          await supabase.from('access_logs').insert([
+              {
+                  user_id: userId,
+                  ip: ip,
+                  user_agent: userAgent,
+              }
+          ]);
+      } catch (err) {
+          console.error("Failed to log access:", err);
+          // Don't block login if logging fails
+      }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -20,11 +42,16 @@ const LoginView: React.FC<LoginViewProps> = () => {
 
     try {
         // --- XỬ LÝ ĐĂNG NHẬP ---
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+
+        if (data.user) {
+            await logAccess(data.user.id);
+        }
+
     } catch (err: any) {
       setError(err.message || 'Thao tác thất bại');
     } finally {

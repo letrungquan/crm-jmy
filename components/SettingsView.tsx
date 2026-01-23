@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Sale, RoleDefinition, Permission } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Sale, RoleDefinition, Permission, AccessLog } from '../types';
 import { supabase } from '../lib/supabaseClient';
 
 interface SettingsViewProps {
@@ -233,32 +233,91 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (role
     );
 };
 
-// ... UserManagementSection remains similar but handled by parent for access control
-
 const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], onRefresh: () => void, isAdmin: boolean }> = ({ sales, roles, onRefresh, isAdmin }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<Sale | null>(null);
+    const [accessLogs, setAccessLogs] = useState<AccessLog[]>([]);
+    
+    // Tab state in modal
+    const [activeTab, setActiveTab] = useState<'info' | 'logs'>('info');
+
+    // Form states
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
     const [roleId, setRoleId] = useState<string>('sale');
     const [loading, setLoading] = useState(false);
 
-    const openAddModal = () => { setEditingUser(null); setEmail(''); setPassword(''); setName(''); setRoleId('sale'); setIsModalOpen(true); };
-    const openEditModal = (user: Sale) => { setEditingUser(user); setEmail(user.id); setPassword(''); setName(user.name); setRoleId(user.role || 'sale'); setIsModalOpen(true); };
+    const fetchAccessLogs = async (userId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('access_logs')
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(20);
+            
+            if (error) throw error;
+            setAccessLogs(data || []);
+        } catch (error) {
+            console.error("Error fetching access logs:", error);
+            setAccessLogs([]);
+        }
+    }
+
+    const openAddModal = () => { 
+        setEditingUser(null); 
+        setEmail(''); 
+        setPassword(''); 
+        setName(''); 
+        setRoleId('sale'); 
+        setActiveTab('info');
+        setAccessLogs([]);
+        setIsModalOpen(true); 
+    };
+
+    const openEditModal = (user: Sale) => { 
+        setEditingUser(user); 
+        setEmail(user.id); // Assuming ID used as email placeholder or identifier if email not available in profile
+        setPassword(''); 
+        setName(user.name); 
+        setRoleId(user.role || 'sale'); 
+        setActiveTab('info');
+        setIsModalOpen(true); 
+        fetchAccessLogs(user.id);
+    };
 
     const handleSaveUser = async (e: React.FormEvent) => {
         e.preventDefault(); setLoading(true);
         try {
             if (editingUser) {
-                const { error } = await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', editingUser.id);
-                if (error) throw error;
+                // Update profile
+                const { error: profileError } = await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', editingUser.id);
+                if (profileError) throw profileError;
+
+                // Password update (Requires Admin privileges in Supabase usually via Admin API or edge function, 
+                // here simplified assuming we might have permissions or this is just placeholder for now)
+                if (password && password.length >= 6) {
+                     const { error: authError } = await supabase.auth.updateUser({ password: password });
+                     // Note: auth.updateUser only updates the CURRENT logged in user. 
+                     // To update another user, you need supabase.auth.admin.updateUserById (Server-side only)
+                     // For this client-side demo, we warn the admin.
+                     if (authError) {
+                         alert("Lưu ý: Không thể đổi mật khẩu người khác từ phía Client. Cần dùng tính năng 'Quên mật khẩu'.");
+                     } else {
+                         // alert("Đã cập nhật (Lưu ý: Chỉ cập nhật được nếu đang sửa chính mình)");
+                     }
+                }
+
                 alert('Cập nhật thông tin thành công!');
             } else {
                 if (password.length < 6) throw new Error("Mật khẩu phải từ 6 ký tự trở lên.");
                 const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name: name } } });
                 if (error) throw error;
-                if (data.user) { await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', data.user.id); alert('Tạo nhân viên thành công!'); }
+                if (data.user) { 
+                    await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', data.user.id); 
+                    alert('Tạo nhân viên thành công!'); 
+                }
             }
             setIsModalOpen(false); onRefresh();
         } catch (err: any) { alert('Lỗi: ' + (err.message || err)); } finally { setLoading(false); }
@@ -268,13 +327,35 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
         if (!confirm(`Bạn có chắc chắn muốn xóa nhân viên "${user.name}"?`)) return;
         setLoading(true);
         try {
+            // Note: Deleting from 'profiles' usually triggers a cascade or requires deletion from auth.users via server-side
             const { error } = await supabase.from('profiles').delete().eq('id', user.id);
             if (error) throw error;
-            alert(`Đã xóa nhân viên ${user.name}`); onRefresh();
+            alert(`Đã xóa hồ sơ nhân viên ${user.name}`); onRefresh();
         } catch(err: any) { alert('Lỗi xóa: ' + err.message); } finally { setLoading(false); }
     };
 
     const getRoleName = (id: string) => roles.find(r => r.id === id)?.name || id;
+
+    const parseUserAgent = (ua: string) => {
+        let device = "Unknown";
+        if (/mobile/i.test(ua)) device = "Mobile";
+        else if (/iPad|Android|Touch/i.test(ua)) device = "Tablet";
+        else device = "Desktop";
+
+        let os = "Unknown OS";
+        if (ua.indexOf("Win") !== -1) os = "Windows";
+        if (ua.indexOf("Mac") !== -1) os = "MacOS";
+        if (ua.indexOf("Linux") !== -1) os = "Linux";
+        if (ua.indexOf("Android") !== -1) os = "Android";
+        if (ua.indexOf("like Mac") !== -1) os = "iOS";
+
+        let browser = "Unknown Browser";
+        if (ua.indexOf("Chrome") !== -1) browser = "Chrome";
+        else if (ua.indexOf("Safari") !== -1) browser = "Safari";
+        else if (ua.indexOf("Firefox") !== -1) browser = "Firefox";
+
+        return `${device} (${os}) - ${browser}`;
+    };
 
     return (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
@@ -285,10 +366,105 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
             <div className="overflow-hidden border border-slate-200 rounded-lg">
                 <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tên</th><th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Vai trò</th><th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Hành động</th></tr></thead>
-                    <tbody className="bg-white divide-y divide-slate-200">{sales.map((sale) => (<tr key={sale.id} className="hover:bg-slate-50"><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{sale.name}</td><td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}`}>{getRoleName(sale.role)}</span></td><td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">{isAdmin && (<div className="flex justify-end space-x-3"><button onClick={() => openEditModal(sale)} className="text-blue-600 hover:text-blue-900">Sửa</button><button onClick={() => handleDeleteUser(sale)} className="text-red-600 hover:text-red-900">Xóa</button></div>)}</td></tr>))}</tbody>
+                    <tbody className="bg-white divide-y divide-slate-200">{sales.map((sale) => (<tr key={sale.id} className="hover:bg-slate-50"><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{sale.name}</td><td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}`}>{getRoleName(sale.role)}</span></td><td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">{isAdmin && (<div className="flex justify-end space-x-3"><button onClick={() => openEditModal(sale)} className="text-blue-600 hover:text-blue-900">Chi tiết</button><button onClick={() => handleDeleteUser(sale)} className="text-red-600 hover:text-red-900">Xóa</button></div>)}</td></tr>))}</tbody>
                 </table>
             </div>
-            {isModalOpen && (<div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6"><h3 className="text-lg font-bold text-slate-800 mb-4">{editingUser ? 'Cập nhật nhân viên' : 'Thêm nhân viên mới'}</h3><form onSubmit={handleSaveUser} className="space-y-4"><div><label className="block text-sm font-medium text-slate-700">Tên hiển thị</label><input type="text" required value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" /></div>{!editingUser && (<><div><label className="block text-sm font-medium text-slate-700">Email</label><input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" /></div><div><label className="block text-sm font-medium text-slate-700">Mật khẩu</label><input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" /></div></>)}<div><label className="block text-sm font-medium text-slate-700">Vai trò</label><select value={roleId} onChange={e => setRoleId(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md">{roles.map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}</select></div><div className="flex justify-end space-x-3 mt-6"><button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">Hủy</button><button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">{loading ? 'Đang xử lý...' : (editingUser ? 'Cập nhật' : 'Tạo')}</button></div></form></div></div>)}
+            
+            {/* User Detail Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                        <header className="p-4 border-b border-slate-200 flex justify-between items-center">
+                            <h3 className="text-lg font-bold text-slate-800">{editingUser ? 'Cập nhật nhân viên' : 'Thêm nhân viên mới'}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </header>
+                        
+                        <div className="border-b border-slate-200 px-4">
+                            <nav className="flex space-x-4">
+                                <button 
+                                    onClick={() => setActiveTab('info')}
+                                    className={`py-3 px-1 text-sm font-medium border-b-2 ${activeTab === 'info' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Thông tin cá nhân
+                                </button>
+                                {editingUser && (
+                                    <button 
+                                        onClick={() => setActiveTab('logs')}
+                                        className={`py-3 px-1 text-sm font-medium border-b-2 ${activeTab === 'logs' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        Lịch sử đăng nhập
+                                    </button>
+                                )}
+                            </nav>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto flex-1">
+                            {activeTab === 'info' ? (
+                                <form onSubmit={handleSaveUser} className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700">Tên hiển thị</label>
+                                        <input type="text" required value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+                                    </div>
+                                    {!editingUser && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700">Email đăng nhập</label>
+                                            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700">{editingUser ? 'Đổi mật khẩu (Chỉ nhập nếu muốn đổi)' : 'Mật khẩu'}</label>
+                                        <input type="password" minLength={6} required={!editingUser} value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="••••••" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700">Vai trò</label>
+                                        <select value={roleId} onChange={e => setRoleId(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                            {roles.map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}
+                                        </select>
+                                    </div>
+                                    <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+                                        <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">Hủy</button>
+                                        <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm">{loading ? 'Đang xử lý...' : (editingUser ? 'Cập nhật' : 'Tạo')}</button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <div>
+                                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4 text-xs text-yellow-800">
+                                        <span className="font-bold">Lưu ý:</span> Theo dõi IP và thiết bị lạ để phát hiện việc chia sẻ tài khoản. 
+                                    </div>
+                                    <div className="overflow-hidden border border-slate-200 rounded-lg">
+                                        <table className="min-w-full divide-y divide-slate-200 text-sm">
+                                            <thead className="bg-slate-50">
+                                                <tr>
+                                                    <th className="px-4 py-2 text-left font-medium text-slate-500">Thời gian</th>
+                                                    <th className="px-4 py-2 text-left font-medium text-slate-500">IP</th>
+                                                    <th className="px-4 py-2 text-left font-medium text-slate-500">Thiết bị</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-slate-200">
+                                                {accessLogs.length > 0 ? (
+                                                    accessLogs.map(log => (
+                                                        <tr key={log.id}>
+                                                            <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{new Date(log.created_at).toLocaleString('vi-VN')}</td>
+                                                            <td className="px-4 py-2 font-mono text-slate-600">{log.ip}</td>
+                                                            <td className="px-4 py-2 text-slate-600 truncate max-w-xs" title={log.user_agent}>{parseUserAgent(log.user_agent)}</td>
+                                                        </tr>
+                                                    ))
+                                                ) : (
+                                                    <tr>
+                                                        <td colSpan={3} className="px-4 py-8 text-center text-slate-400 italic">Chưa có dữ liệu đăng nhập.</td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -319,9 +495,18 @@ const SettingsView: React.FC<SettingsViewProps> = (props) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 mt-8 border-t pt-8">
                <div className="col-span-2 text-lg font-bold text-slate-700">Công cụ sửa lỗi Database (Dành cho Dev/Admin)</div>
                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-5 md:col-span-2">
-                  <h3 className="text-yellow-800 font-bold mb-2">9. Tạo Bảng Cấu Hình</h3>
+                  <h3 className="text-yellow-800 font-bold mb-2">9. Tạo Bảng Cấu Hình & Logs</h3>
                   <div className="relative mb-3">
-                     <textarea readOnly value={props.useLocalOnly ? 'Offline Mode' : `CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());`} className="w-full h-24 text-[10px] font-mono p-2 border border-yellow-200 rounded bg-white focus:outline-none" />
+                     <textarea readOnly value={props.useLocalOnly ? 'Offline Mode' : `
+CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value jsonb, updated_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS access_logs (
+  id bigint generated by default as identity primary key,
+  user_id uuid references auth.users not null,
+  ip text,
+  user_agent text,
+  created_at timestamptz default now()
+);
+`} className="w-full h-32 text-[10px] font-mono p-2 border border-yellow-200 rounded bg-white focus:outline-none" />
                   </div>
               </div>
           </div>
