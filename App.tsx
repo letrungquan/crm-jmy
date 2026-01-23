@@ -215,16 +215,21 @@ function App() {
 
   const fetchUserProfile = async (userId: string) => {
       try {
-          const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+          const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
           if (error) throw error;
+          
           if (data) {
               setUserProfile(data);
           } else {
-              // Fallback if profile doesn't exist
-              setUserProfile({ id: userId, name: 'User', role: 'sale' });
+              // Profile deleted or restricted -> Sign out to enforce security
+              if (!useLocalOnly) {
+                  await supabase.auth.signOut();
+              }
+              setUserProfile(null);
           }
       } catch (error) {
           console.error('Error fetching profile:', error);
+          if (!useLocalOnly) await supabase.auth.signOut();
       } finally {
           setIsLoading(false);
       }

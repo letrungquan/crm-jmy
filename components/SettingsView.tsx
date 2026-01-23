@@ -75,7 +75,6 @@ const ConfigSection: React.FC<{
 };
 
 const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (roles: RoleDefinition[]) => void }> = ({ roles, onUpdate }) => {
-    // Role management is strictly for Admins (handled by parent conditional rendering)
     const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [newRoleName, setNewRoleName] = useState('');
@@ -238,7 +237,12 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
     const [editingUser, setEditingUser] = useState<Sale | null>(null);
     const [accessLogs, setAccessLogs] = useState<AccessLog[]>([]);
     
-    // Tab state in modal
+    // Deletion Modal State
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [userToDelete, setUserToDelete] = useState<Sale | null>(null);
+    const [transferToId, setTransferToId] = useState<string>('unassigned');
+    
+    // Tab state in detail modal
     const [activeTab, setActiveTab] = useState<'info' | 'logs'>('info');
 
     // Form states
@@ -278,7 +282,7 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
 
     const openEditModal = (user: Sale) => { 
         setEditingUser(user); 
-        setEmail(user.id); // Assuming ID used as email placeholder or identifier if email not available in profile
+        setEmail(''); 
         setPassword(''); 
         setName(user.name); 
         setRoleId(user.role || 'sale'); 
@@ -291,47 +295,113 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
         e.preventDefault(); setLoading(true);
         try {
             if (editingUser) {
-                // Update profile
                 const { error: profileError } = await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', editingUser.id);
                 if (profileError) throw profileError;
 
-                // Password update (Requires Admin privileges in Supabase usually via Admin API or edge function, 
-                // here simplified assuming we might have permissions or this is just placeholder for now)
                 if (password && password.length >= 6) {
                      const { error: authError } = await supabase.auth.updateUser({ password: password });
-                     // Note: auth.updateUser only updates the CURRENT logged in user. 
-                     // To update another user, you need supabase.auth.admin.updateUserById (Server-side only)
-                     // For this client-side demo, we warn the admin.
                      if (authError) {
-                         alert("Lưu ý: Không thể đổi mật khẩu người khác từ phía Client. Cần dùng tính năng 'Quên mật khẩu'.");
-                     } else {
-                         // alert("Đã cập nhật (Lưu ý: Chỉ cập nhật được nếu đang sửa chính mình)");
+                         alert("Lưu ý: Không thể đổi mật khẩu người khác từ client. Cần dùng chức năng Reset Password.");
                      }
                 }
-
                 alert('Cập nhật thông tin thành công!');
             } else {
                 if (password.length < 6) throw new Error("Mật khẩu phải từ 6 ký tự trở lên.");
                 const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name: name } } });
-                if (error) throw error;
-                if (data.user) { 
-                    await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', data.user.id); 
+                
+                // Check if Supabase returned a fake/obfuscated user (happens when user exists)
+                // Real users usually have 'identities' array populated. Fake ones often don't or have specific traits.
+                // But the most reliable way is: if error says "already registered", data.user is null.
+                // If success but user exists, data.user is present but ID is existing ID.
+                
+                if (error) {
+                    if (error.message.includes('already registered')) {
+                        throw new Error("Email này đã được đăng ký trong hệ thống (nhưng có thể thiếu hồ sơ). Vui lòng sử dụng công cụ SQL bên dưới để xóa user cũ khỏi Auth, sau đó thử lại.");
+                    }
+                    throw error;
+                }
+
+                // If signUp returns a user, but identities is empty, it might be a fake user response (security feature)
+                if (data.user && data.user.identities && data.user.identities.length === 0) {
+                     throw new Error("Email đã tồn tại. Hệ thống trả về user ảo. Vui lòng xóa user cũ trong Auth bằng công cụ SQL.");
+                }
+                
+                const userId = data.user?.id;
+                if (userId) { 
+                    const { error: upsertError } = await supabase.from('profiles').upsert({ 
+                        id: userId,
+                        name: name, 
+                        role: roleId 
+                    });
+                    
+                    if (upsertError) {
+                        if (upsertError.message.includes('foreign key constraint')) {
+                            throw new Error("Lỗi dữ liệu: User ID không khớp. Vui lòng xóa email này khỏi Authentication (dùng SQL bên dưới) và tạo lại.");
+                        }
+                        throw upsertError;
+                    }
                     alert('Tạo nhân viên thành công!'); 
+                } else {
+                    throw new Error("Không thể tạo user. Vui lòng thử lại.");
                 }
             }
             setIsModalOpen(false); onRefresh();
         } catch (err: any) { alert('Lỗi: ' + (err.message || err)); } finally { setLoading(false); }
     };
 
-    const handleDeleteUser = async (user: Sale) => {
-        if (!confirm(`Bạn có chắc chắn muốn xóa nhân viên "${user.name}"?`)) return;
+    const openDeleteConfirmation = (user: Sale) => {
+        setUserToDelete(user);
+        setTransferToId('unassigned');
+        setDeleteModalOpen(true);
+    };
+
+    const executeDeleteUser = async () => {
+        if (!userToDelete) return;
+        
         setLoading(true);
         try {
-            // Note: Deleting from 'profiles' usually triggers a cascade or requires deletion from auth.users via server-side
-            const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+            const newAssignee = transferToId === 'unassigned' ? null : transferToId;
+
+            // 0. Clean up access logs
+            try { await supabase.from('access_logs').delete().eq('user_id', userToDelete.id); } catch (e) { }
+
+            // 1-5. Reassign Data
+            await supabase.from('leads').update({ assigned_to: newAssignee }).eq('assigned_to', userToDelete.id);
+            await supabase.from('orders').update({ assigned_to: newAssignee }).eq('assigned_to', userToDelete.id);
+            await supabase.from('cskh').update({ assigned_to: newAssignee }).eq('assigned_to', userToDelete.id);
+            
+            const { error: err4 } = await supabase.from('customers').update({ assigned_to: newAssignee }).eq('assigned_to', userToDelete.id);
+            if (err4 && !err4.message.includes('column')) throw new Error("Lỗi cập nhật Khách hàng: " + err4.message);
+
+            try { await supabase.from('notes').update({ created_by: null }).eq('created_by', userToDelete.id); } catch (e) { }
+
+            // 6. Delete Profile
+            const { error, count } = await supabase.from('profiles').delete({ count: 'exact' }).eq('id', userToDelete.id);
             if (error) throw error;
-            alert(`Đã xóa hồ sơ nhân viên ${user.name}`); onRefresh();
-        } catch(err: any) { alert('Lỗi xóa: ' + err.message); } finally { setLoading(false); }
+
+            if (count === 0) {
+                // If profile not found, maybe it was already deleted. Try deleting from Auth anyway.
+                console.warn("Profile not found, attempting to delete auth user anyway.");
+            }
+
+            // 7. Try Delete from Auth via RPC (To prevent orphan users)
+            const { error: rpcError } = await supabase.rpc('delete_user_by_id', { target_user_id: userToDelete.id });
+            
+            if (rpcError) {
+                console.warn("RPC delete failed:", rpcError);
+                alert(`Đã xóa hồ sơ nhân viên ${userToDelete.name}. \n\nTUY NHIÊN: Không thể xóa tài khoản đăng nhập (Auth). \nVui lòng chạy lệnh SQL 'delete_user_by_id' hoặc xóa thủ công trong Supabase Dashboard.`); 
+            } else {
+                alert(`Đã xóa hoàn toàn nhân viên ${userToDelete.name} (Hồ sơ & Tài khoản).`); 
+            }
+
+            onRefresh();
+            setDeleteModalOpen(false);
+        } catch(err: any) { 
+            console.error(err);
+            alert(err.message || err); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const getRoleName = (id: string) => roles.find(r => r.id === id)?.name || id;
@@ -341,20 +411,7 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
         if (/mobile/i.test(ua)) device = "Mobile";
         else if (/iPad|Android|Touch/i.test(ua)) device = "Tablet";
         else device = "Desktop";
-
-        let os = "Unknown OS";
-        if (ua.indexOf("Win") !== -1) os = "Windows";
-        if (ua.indexOf("Mac") !== -1) os = "MacOS";
-        if (ua.indexOf("Linux") !== -1) os = "Linux";
-        if (ua.indexOf("Android") !== -1) os = "Android";
-        if (ua.indexOf("like Mac") !== -1) os = "iOS";
-
-        let browser = "Unknown Browser";
-        if (ua.indexOf("Chrome") !== -1) browser = "Chrome";
-        else if (ua.indexOf("Safari") !== -1) browser = "Safari";
-        else if (ua.indexOf("Firefox") !== -1) browser = "Firefox";
-
-        return `${device} (${os}) - ${browser}`;
+        return `${device}`;
     };
 
     return (
@@ -366,7 +423,7 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
             <div className="overflow-hidden border border-slate-200 rounded-lg">
                 <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tên</th><th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Vai trò</th><th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Hành động</th></tr></thead>
-                    <tbody className="bg-white divide-y divide-slate-200">{sales.map((sale) => (<tr key={sale.id} className="hover:bg-slate-50"><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{sale.name}</td><td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}`}>{getRoleName(sale.role)}</span></td><td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">{isAdmin && (<div className="flex justify-end space-x-3"><button onClick={() => openEditModal(sale)} className="text-blue-600 hover:text-blue-900">Chi tiết</button><button onClick={() => handleDeleteUser(sale)} className="text-red-600 hover:text-red-900">Xóa</button></div>)}</td></tr>))}</tbody>
+                    <tbody className="bg-white divide-y divide-slate-200">{sales.map((sale) => (<tr key={sale.id} className="hover:bg-slate-50"><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{sale.name}</td><td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${sale.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}`}>{getRoleName(sale.role)}</span></td><td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">{isAdmin && (<div className="flex justify-end space-x-3"><button onClick={() => openEditModal(sale)} className="text-blue-600 hover:text-blue-900">Chi tiết</button><button onClick={() => openDeleteConfirmation(sale)} className="text-red-600 hover:text-red-900">Xóa</button></div>)}</td></tr>))}</tbody>
                 </table>
             </div>
             
@@ -465,6 +522,54 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
                     </div>
                 </div>
             )}
+
+            {/* DELETE USER & TRANSFER MODAL */}
+            {deleteModalOpen && userToDelete && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                        <h3 className="text-lg font-bold text-red-600 mb-2">Xóa nhân viên: {userToDelete.name}</h3>
+                        
+                        <div className="bg-orange-50 border border-orange-200 rounded p-3 mb-4 text-sm text-orange-800">
+                            <p className="font-bold mb-1">Cảnh báo:</p>
+                            <p>Hành động này sẽ xóa vĩnh viễn tài khoản và quyền truy cập của nhân viên này.</p>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Chuyển giao dữ liệu cho:</label>
+                            <p className="text-xs text-slate-500 mb-2">Lead, Khách hàng, Đơn hàng, CSKH đang phụ trách sẽ được chuyển sang nhân viên này.</p>
+                            <select 
+                                value={transferToId} 
+                                onChange={(e) => setTransferToId(e.target.value)} 
+                                className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                <option value="unassigned">-- Không gán (Để trống) --</option>
+                                {sales.filter(s => s.id !== userToDelete.id).map(sale => (
+                                    <option key={sale.id} value={sale.id}>{sale.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex justify-end space-x-3 pt-2">
+                            <button 
+                                onClick={() => setDeleteModalOpen(false)}
+                                className="px-4 py-2 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50"
+                            >
+                                Hủy bỏ
+                            </button>
+                            <button 
+                                onClick={executeDeleteUser} 
+                                disabled={loading}
+                                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center"
+                            >
+                                {loading && (
+                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                )}
+                                {transferToId === 'unassigned' ? 'Xóa & Hủy gán' : 'Xóa & Chuyển giao'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -506,8 +611,40 @@ CREATE TABLE IF NOT EXISTS access_logs (
   user_agent text,
   created_at timestamptz default now()
 );
+
+-- Fix RLS for Profile Deletion & Upsert
+DROP POLICY IF EXISTS "Admins can delete any profile" ON profiles;
+CREATE POLICY "Admins can delete any profile" ON profiles FOR DELETE USING (
+  (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
+
+DROP POLICY IF EXISTS "Admins can insert profiles" ON profiles;
+CREATE POLICY "Admins can insert profiles" ON profiles FOR INSERT WITH CHECK (
+  (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
+
+DROP POLICY IF EXISTS "Admins can update profiles" ON profiles;
+CREATE POLICY "Admins can update profiles" ON profiles FOR UPDATE USING (
+  (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
+
+-- 10. (Quan trọng) Hàm xóa User khỏi Auth (Chạy cái này để Admin có thể xóa triệt để)
+create or replace function delete_user_by_id(target_user_id uuid)
+returns void as $$
+begin
+  if (select role from public.profiles where id = auth.uid()) = 'admin' then
+    delete from auth.users where id = target_user_id;
+  else
+    raise exception 'Quyền hạn không đủ';
+  end if;
+end;
+$$ language plpgsql security definer;
+
+-- Fix Missing assigned_to column in customers
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS assigned_to uuid REFERENCES auth.users;
 `} className="w-full h-32 text-[10px] font-mono p-2 border border-yellow-200 rounded bg-white focus:outline-none" />
                   </div>
+                  <p className="text-xs text-yellow-700 italic">Copy lệnh trên và chạy trong SQL Editor của Supabase để cấp quyền xóa user cho Admin.</p>
               </div>
           </div>
       )}
