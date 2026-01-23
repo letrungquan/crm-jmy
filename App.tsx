@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from './lib/supabaseClient';
 import useLocalStorage from './hooks/useLocalStorage';
 import { 
@@ -376,42 +376,57 @@ function App() {
       fetchData();
   }, [fetchData]);
 
-  // --- EFFECT: REALTIME SUBSCRIPTION ---
+  // --- REALTIME SUBSCRIPTION (Optimized) ---
+  
+  // Use a Ref to hold the latest fetchData function. 
+  // This allows the subscription to call the latest version without being recreated and triggering a re-subscribe.
+  const fetchDataRef = useRef(fetchData);
+  useEffect(() => {
+      fetchDataRef.current = fetchData;
+  }, [fetchData]);
+
   useEffect(() => {
     if (useLocalOnly || !session) return;
 
-    const channel = supabase.channel('db-changes')
+    // console.log("Initializing Realtime Subscription...");
+
+    const channel = supabase.channel('global-db-changes')
         .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'leads' },
-            () => fetchData(true, true) // Silent refresh on leads change
+            (payload) => {
+                // console.log('Realtime Lead Change:', payload);
+                fetchDataRef.current(true, true); // Silent refresh
+            }
         )
         .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'customers' },
-            () => fetchData(true, true) // Silent refresh on customers change
+            () => fetchDataRef.current(true, true)
         )
         .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'orders' },
-            () => fetchData(true, true) // Silent refresh on orders change
+            () => fetchDataRef.current(true, true)
         )
         .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'cskh' },
-            () => fetchData(true, true) // Silent refresh on CSKH change
+            () => fetchDataRef.current(true, true)
         )
         .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'notes' },
-            () => fetchData(true, true) // Silent refresh on notes change
+            () => fetchDataRef.current(true, true)
         )
-        .subscribe();
+        .subscribe((status) => {
+            // if (status === 'SUBSCRIBED') console.log("Realtime Connected!");
+        });
 
     return () => {
         supabase.removeChannel(channel);
     };
-  }, [useLocalOnly, session, fetchData]);
+  }, [useLocalOnly, session]); // Dependency array is minimal to prevent reconnection loops
 
   const selectedCustomer = useMemo(() => customers.find(c => c.phone === selectedCustomerPhone) || null, [customers, selectedCustomerPhone]);
 
