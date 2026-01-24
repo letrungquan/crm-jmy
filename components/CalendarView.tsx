@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Lead } from '../types';
 
@@ -21,6 +22,39 @@ const getWeekDays = (d: Date) => {
     return days;
 }
 
+// Helper to safely parse lead date for calendar display
+const getLeadDate = (lead: Lead): Date | null => {
+    // FIX: Strictly select date source based on status to avoid stale data issues.
+    // If status is 'scheduled' or 'completed', we look for the real appointment date.
+    // If status is 'contacting' (or others), we look for the projected date.
+    let dateStr: string | null = null;
+    let isProjected = false;
+
+    if (['scheduled', 'completed'].includes(lead.status)) {
+        dateStr = lead.appointmentDate;
+    } else {
+        dateStr = lead.projectedAppointmentDate;
+        isProjected = true;
+    }
+
+    if (!dateStr) return null;
+    
+    // If it's a projected date (date-only or T12:00:00), parse explicitly to local noon
+    // This prevents timezone shifts (e.g., UTC midnight becoming previous day)
+    if (isProjected) {
+        try {
+            const parts = dateStr.split('T');
+            const [y, m, d] = parts[0].split('-').map(Number);
+            // Use local time noon
+            return new Date(y, m - 1, d, 12, 0, 0);
+        } catch (e) {
+            return new Date(dateStr);
+        }
+    }
+    
+    return new Date(dateStr);
+};
+
 
 const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -30,7 +64,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
   const monthLeads = useMemo(() => {
     if (viewMode !== 'month') return [];
     return leads.filter(lead => {
-        const leadDate = lead.appointmentDate ? new Date(lead.appointmentDate) : (lead.projectedAppointmentDate ? new Date(lead.projectedAppointmentDate) : null);
+        const leadDate = getLeadDate(lead);
         if (!leadDate || !lead.potentialRevenue) return false;
         return leadDate.getFullYear() === currentDate.getFullYear() &&
                leadDate.getMonth() === currentDate.getMonth();
@@ -47,7 +81,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
     end.setHours(23,59,59,999);
 
     return leads.filter(lead => {
-        const date = lead.appointmentDate ? new Date(lead.appointmentDate) : (lead.projectedAppointmentDate ? new Date(lead.projectedAppointmentDate) : null);
+        const date = getLeadDate(lead);
         if (!date || !lead.potentialRevenue) return false;
         return date >= start && date <= end;
     });
@@ -112,8 +146,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
     
     const getLeadsForDay = (day: number) => {
         const dailyLeads = monthLeads.filter(lead => {
-            const leadDate = new Date(lead.appointmentDate || lead.projectedAppointmentDate!);
-            return leadDate.getDate() === day;
+            const leadDate = getLeadDate(lead);
+            return leadDate ? leadDate.getDate() === day : false;
         });
         const dailyRevenue = dailyLeads.reduce((total, lead) => total + (lead.potentialRevenue || 0), 0);
         return { dailyLeads, dailyRevenue };
@@ -177,12 +211,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
     const getLeadsForDay = (date: Date) => {
         const dailyLeads = weekLeads
             .filter(lead => {
-                const leadDate = new Date(lead.appointmentDate || lead.projectedAppointmentDate!);
-                return leadDate.toDateString() === date.toDateString();
+                const leadDate = getLeadDate(lead);
+                return leadDate ? leadDate.toDateString() === date.toDateString() : false;
             })
             .sort((a,b) => {
-                const aTime = new Date(a.appointmentDate || a.projectedAppointmentDate!).getTime();
-                const bTime = new Date(b.appointmentDate || b.projectedAppointmentDate!).getTime();
+                const aTime = getLeadDate(a)?.getTime() || 0;
+                const bTime = getLeadDate(b)?.getTime() || 0;
                 return aTime - bTime;
             });
 

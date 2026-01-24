@@ -32,9 +32,20 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
   const isContactingStatus = currentLead.status === 'contacting';
 
   const handleSave = () => {
-    // Ensure dates are valid ISO strings if needed, but Supabase handles timestamp inputs flexibly.
-    // We pass currentLead as is.
-    onSave(currentLead);
+    // Clean up data to avoid conflicting dates (stale data)
+    const leadToSave = { ...currentLead };
+    
+    if (isContactingStatus) {
+        // If in contacting mode, we rely on projected date. 
+        // Clear appointmentDate so it doesn't persist and confuse the calendar.
+        leadToSave.appointmentDate = null;
+    } else if (isAppointmentStatus) {
+        // If scheduled, we rely on appointmentDate. 
+        // We can optionally clear projected, but keeping it as history is fine.
+        // Priority is handled in CalendarView anyway.
+    }
+
+    onSave(leadToSave);
   };
   
   const handleDelete = async () => {
@@ -69,8 +80,9 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
     if (name === 'potentialRevenue') {
       setCurrentLead(prev => ({ ...prev, [name]: value === '' ? null : Number(value) }));
     } else if (name === 'projectedAppointmentDate') {
-      // value is "YYYY-MM-DD", convert to ISO string. Append time to avoid timezone issues.
-      setCurrentLead(prev => ({ ...prev, [name]: value ? `${value}T00:00:00` : null}));
+      // value is "YYYY-MM-DD", convert to ISO string. 
+      // Use 12:00:00 instead of 00:00:00 to prevent timezone shifting issues when viewing on calendar
+      setCurrentLead(prev => ({ ...prev, [name]: value ? `${value}T12:00:00` : null}));
     } else {
       setCurrentLead(prev => ({...prev, [name]: value}));
     }

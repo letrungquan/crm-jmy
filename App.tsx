@@ -49,6 +49,7 @@ const mapAppCustomerDataToDbCustomer = (data: Partial<CustomerData>) => {
   if (data.generalNotes !== undefined) dbData.general_notes = data.generalNotes;
   if (data.tags !== undefined) dbData.tags = data.tags;
   if (data.profileCompleteness !== undefined) dbData.profile_completeness = data.profileCompleteness;
+  if (data.assignedTo !== undefined) dbData.assigned_to = data.assignedTo;
   
   // Tracking fields
   if (data.ip !== undefined) dbData.ip = data.ip;
@@ -288,6 +289,7 @@ function App() {
                   utmMedium: c.utm_medium,
                   eventId: c.event_id,
                   externalId: c.external_id,
+                  assignedTo: c.assigned_to,
                   // ... map other fields if necessary
               };
           });
@@ -515,7 +517,7 @@ function App() {
       setConfirmModal({
           isOpen: true,
           title: `XÓA ${phones.length} KHÁCH HÀNG`,
-          message: `Bạn sắp xóa vĩnh viễn ${phones.length} khách hàng đã chọn.\n\nTất cả dữ liệu liên quan (cơ hội, đơn hàng, ghi chú) cũng sẽ bị xóa. Hành động này không thể hoàn tác.`,
+          message: `Bạn sắp xóa vĩnh viễn ${phones.length} khách hàng đã chọn.\n\Tất cả dữ liệu liên quan (cơ hội, đơn hàng, ghi chú) cũng sẽ bị xóa. Hành động này không thể hoàn tác.`,
           isDangerous: true,
           onConfirm: () => executeBulkDeleteCustomers(phones)
       });
@@ -829,7 +831,7 @@ function App() {
           }
 
           // 3. Create CSKH
-          const { error: cskhError } = await supabase.from('cskh').insert([{
+          const { error: cskhError = null } = await supabase.from('cskh').insert([{
               customer_phone: leadToComplete.phone,
               service: actualService, // Use actual service
               status: 'cskh_new', // Set to 'Mới tiếp nhận'
@@ -936,23 +938,6 @@ function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans antialiased relative">
-      {isRefreshing && (
-        <div className="fixed inset-0 bg-white/50 z-[100] flex items-center justify-center">
-            <div className="bg-white p-4 rounded-lg shadow-lg flex items-center space-x-3 border border-slate-100">
-                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                 <span className="text-sm font-medium text-slate-700">Đang xử lý...</span>
-            </div>
-        </div>
-      )}
-      
-      {leadToComplete && (
-          <CompleteLeadModal 
-            lead={leadToComplete} 
-            onClose={() => setLeadToComplete(null)} 
-            onConfirm={executeLeadCompletion} 
-          />
-      )}
-
       <ConfirmationModal 
         isOpen={confirmModal.isOpen}
         title={confirmModal.title}
@@ -984,7 +969,7 @@ function App() {
             </div>
         )}
         <main className="flex-1 overflow-auto bg-white">
-          {activeView === 'dashboard' && <ReportsView leads={leads} orders={orders} customers={customersData} sources={sources} />}
+          {activeView === 'dashboard' && <ReportsView leads={leads} orders={orders} customers={customersData} sources={sources} sales={sales} />}
           {activeView === 'sales' && (
             <KanbanBoard 
                 leads={leads} 
@@ -1049,6 +1034,7 @@ function App() {
                     sources={sources}
                     relationships={relationships}
                     customerGroups={customerGroups}
+                    sales={sales}
                   />
                 : selectedCustomer && <CustomerDetailView customer={selectedCustomer} sales={sales} statuses={statuses} cskhItems={cskhItems.filter(item => item.customerPhone === selectedCustomer.phone)} relationships={relationships} onClose={() => { setCustomerViewMode('list'); setSelectedCustomerPhone(null); }} onSelectLead={setSelectedLead} onUpdateCustomer={handleUpdateCustomer} onEdit={(c) => { setEditingCustomer(c); setIsCustomerModalOpen(true); }} onDelete={hasPermission('customer.delete') ? handleDeleteCustomer : undefined} onAddNote={handleAddNote} currentUser={currentUser} isAdmin={isAdmin} />
           )}
@@ -1142,8 +1128,8 @@ function App() {
                   status: data.status, 
                   service: data.service, 
                   description: data.description, 
-                  potential_revenue: data.potentialRevenue, 
-                  projected_appointment_date: data.projectedAppointmentDate, 
+                  potential_revenue: data.potential_revenue, 
+                  projected_appointment_date: data.projected_appointment_date, 
                   appointment_date: data.appointmentDate
               }]);
               if (!error) { setIsAddModalOpen(false); /* Fetch handled by realtime */ } else { alert(formatErrorMessage(error)); }
@@ -1286,7 +1272,7 @@ function App() {
                        if(custError) console.error("Lỗi import customer:", custError);
                    }
                    const dbOrders = importedData.map(o => ({ external_id: o.externalId, customer_phone: o.customerPhone, service: o.service, revenue: o.revenue, status: o.status, source: o.source, created_at: o.createdAt }));
-                   const { error } = await supabase.from('orders').insert(dbOrders);
+                   const { error = null } = await supabase.from('orders').insert(dbOrders);
                    if (error) alert("Lỗi import đơn hàng: " + formatErrorMessage(error)); else { alert(`Đã import thành công ${importedData.length} đơn hàng.`); /* fetch by realtime */ }
                } catch (err) { alert("Có lỗi xảy ra khi import: " + formatErrorMessage(err)); } finally { setIsRefreshing(false); }
            }

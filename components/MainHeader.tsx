@@ -3,12 +3,14 @@ import React from 'react';
 import { Sale } from '../types';
 import { supabase } from '../lib/supabaseClient';
 
-const MainHeader: React.FC<{ 
-  onAddLead: () => void; 
+interface MainHeaderProps {
+  onAddLead: () => void;
   onToggleSidebar: () => void;
   sales: Sale[];
   userProfile: Sale | null;
-}> = ({ onAddLead, onToggleSidebar, userProfile }) => {
+}
+
+const MainHeader: React.FC<MainHeaderProps> = ({ onAddLead, onToggleSidebar, userProfile }) => {
   
   const handleLogout = async () => {
     // Chỉ cần gọi signOut, App.tsx sẽ lắng nghe sự kiện onAuthStateChange 

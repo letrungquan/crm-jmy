@@ -1,202 +1,344 @@
 
-import React, { useMemo } from 'react';
-import { Lead, Order, CustomerData } from '../types';
+import React, { useMemo, useState } from 'react';
+import { Lead, Order, CustomerData, Sale } from '../types';
 
 interface ReportsViewProps {
   leads: Lead[];
   orders: Order[];
   customers: Record<string, CustomerData>;
   sources: string[];
+  sales?: Sale[];
 }
+
+type TimeRange = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'custom';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
 
-const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sources }) => {
-  // 1. Conversion Rates
-  const conversionStats = useMemo(() => {
-    const total = leads.length;
-    const completed = leads.filter(l => l.status === 'completed').length;
-    const rate = total > 0 ? (completed / total) * 100 : 0;
+const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sources, sales = [] }) => {
+  const [timeRange, setTimeRange] = useState<TimeRange>('this_month');
+  const [customRange, setCustomRange] = useState({ start: '', end: '' });
 
-    // Breakdown by status
+  // 1. Logic tính toán khoảng thời gian
+  const dateFilter = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now);
+    const end = new Date(now);
+    
+    switch (timeRange) {
+      case 'today':
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'yesterday':
+        start.setDate(now.getDate() - 1);
+        start.setHours(0, 0, 0, 0);
+        end.setDate(now.getDate() - 1);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'this_week':
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        start.setDate(diff);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'last_week':
+        const lastWeekStart = new Date(now);
+        lastWeekStart.setDate(now.getDate() - now.getDay() - 6);
+        const lastWeekEnd = new Date(lastWeekStart);
+        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+        start.setTime(lastWeekStart.setHours(0, 0, 0, 0));
+        end.setTime(lastWeekEnd.setHours(23, 59, 59, 999));
+        break;
+      case 'this_month':
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'last_month':
+        start.setMonth(now.getMonth() - 1, 1);
+        start.setHours(0, 0, 0, 0);
+        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+        end.setTime(lastDay.setHours(23, 59, 59, 999));
+        break;
+      case 'custom':
+        if (customRange.start) start.setTime(new Date(customRange.start).setHours(0, 0, 0, 0));
+        if (customRange.end) end.setTime(new Date(customRange.end).setHours(23, 59, 59, 999));
+        break;
+    }
+    return { start, end };
+  }, [timeRange, customRange]);
+
+  // 2. Lọc dữ liệu theo thời gian
+  const filteredData = useMemo(() => {
+    const fLeads = leads.filter(l => {
+      const d = new Date(l.createdAt);
+      return d >= dateFilter.start && d <= dateFilter.end;
+    });
+    const fOrders = orders.filter(o => {
+      const d = new Date(o.createdAt);
+      return d >= dateFilter.start && d <= dateFilter.end;
+    });
+    return { leads: fLeads, orders: fOrders };
+  }, [leads, orders, dateFilter]);
+
+  // 3. Chỉ số CEO Metrics (Dựa trên dữ liệu đã lọc)
+  const ceoStats = useMemo(() => {
+    const totalLeads = filteredData.leads.length;
+    const completedLeads = filteredData.leads.filter(l => l.status === 'completed').length;
+    const conversionRate = totalLeads > 0 ? (completedLeads / totalLeads) * 100 : 0;
+
+    const completedOrders = filteredData.orders.filter(o => o.status === 'completed');
+    const totalRevenue = completedOrders.reduce((sum, o) => sum + o.revenue, 0);
+    const avgOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
+
     const statusCounts: Record<string, number> = {};
-    leads.forEach(l => {
+    filteredData.leads.forEach(l => {
       statusCounts[l.status] = (statusCounts[l.status] || 0) + 1;
     });
 
-    return { total, completed, rate, statusCounts };
-  }, [leads]);
+    return { totalLeads, completedLeads, conversionRate, totalRevenue, avgOrderValue, statusCounts };
+  }, [filteredData]);
 
-  // 2. Acquisition Sources
+  // 4. Hiệu suất Sale
+  const salesPerformance = useMemo(() => {
+    const perf: Record<string, number> = {};
+    filteredData.orders.filter(o => o.status === 'completed').forEach(o => {
+      const saleId = o.assignedTo || 'unassigned';
+      perf[saleId] = (perf[saleId] || 0) + o.revenue;
+    });
+
+    return Object.entries(perf)
+      .map(([id, revenue]) => ({
+        id,
+        name: sales.find(s => s.id === id)?.name || 'Chưa gán',
+        revenue
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [filteredData.orders, sales]);
+
+  // 5. Hoạt động gần đây (Luôn hiển thị mới nhất nhưng đánh dấu mục trong khoảng lọc)
+  const recentActivities = useMemo(() => {
+    const notes = leads.flatMap(l => l.notes.map(n => ({
+      id: n.id,
+      type: 'note',
+      content: n.content,
+      user: sales.find(s => s.id === n.createdBy)?.name || 'Hệ thống',
+      customer: l.name,
+      date: n.createdAt
+    })));
+
+    const newOrders = orders.map(o => ({
+      id: o.id,
+      type: 'order',
+      content: `Đã tạo đơn hàng mới: ${o.service}`,
+      user: sales.find(s => s.id === o.assignedTo)?.name || 'Hệ thống',
+      customer: customers[o.customerPhone]?.name || o.customerPhone,
+      date: o.createdAt,
+      revenue: o.revenue
+    }));
+
+    return [...notes, ...newOrders]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 20);
+  }, [leads, orders, sales, customers]);
+
+  // 6. Nguồn khách hàng
   const sourceStats = useMemo(() => {
     const counts: Record<string, number> = {};
-    Object.values(customers).forEach((c: CustomerData) => {
-      const src = c.source || 'Không xác định';
+    filteredData.leads.forEach(l => {
+      const src = l.source || 'Không xác định';
       counts[src] = (counts[src] || 0) + 1;
     });
-
-    const sorted = Object.entries(counts)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 8); // Top 8 sources
-
-    const totalCustomers = Object.values(customers).length;
-
-    return { counts: sorted, total: totalCustomers };
-  }, [customers]);
-
-  // 3. Revenue per Service
-  const revenueStats = useMemo(() => {
-    const serviceRevenue: Record<string, number> = {};
-    orders.forEach(o => {
-      if (o.status === 'completed') {
-        serviceRevenue[o.service] = (serviceRevenue[o.service] || 0) + o.revenue;
-      }
-    });
-
-    const sorted = Object.entries(serviceRevenue)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 10); // Top 10 services
-
-    const totalRevenue = orders
-      .filter(o => o.status === 'completed')
-      .reduce((sum, o) => sum + o.revenue, 0);
-
-    return { services: sorted, total: totalRevenue };
-  }, [orders]);
+    const sorted = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 6);
+    return { counts: sorted, total: filteredData.leads.length };
+  }, [filteredData.leads]);
 
   return (
-    <div className="p-6 bg-slate-50 min-h-full">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <header>
-          <h2 className="text-2xl font-bold text-slate-800">Báo cáo & Phân tích</h2>
-          <p className="text-sm text-slate-500 mt-1">Tổng quan về hiệu quả kinh doanh và marketing</p>
-        </header>
-
-        {/* Headline KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Tổng cơ hội</p>
-            <p className="text-3xl font-bold text-slate-800">{conversionStats.total}</p>
+    <div className="p-4 sm:p-6 bg-slate-50 min-h-full space-y-6">
+      <header className="flex flex-col space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Bảng điều khiển CEO</h2>
+            <p className="text-sm text-slate-500 mt-1">Kiểm soát hiệu suất kinh doanh theo thời gian</p>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Tỷ lệ chốt đơn</p>
-            <p className="text-3xl font-bold text-blue-600">{conversionStats.rate.toFixed(1)}%</p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Tổng khách hàng</p>
-            <p className="text-3xl font-bold text-indigo-600">{sourceStats.total}</p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Tổng doanh thu</p>
-            <p className="text-2xl font-bold text-green-600 truncate">{formatCurrency(revenueStats.total)}</p>
+          <div className="flex items-center space-x-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+              <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+              <span className="text-xs font-bold text-slate-600 uppercase tracking-tight">Hệ thống thời gian thực</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Conversion Rate Funnel */}
-          <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-              </svg>
-              Tỷ lệ chuyển đổi Lead
-            </h3>
-            <div className="space-y-6">
-              <div className="relative pt-1">
-                <div className="flex mb-2 items-center justify-between">
-                  <div>
-                    <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-100">
-                      Conversion Rate
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs font-semibold inline-block text-blue-600">
-                      {conversionStats.rate.toFixed(1)}%
-                    </span>
-                  </div>
-                </div>
-                <div className="overflow-hidden h-3 mb-4 text-xs flex rounded-full bg-blue-50">
-                  <div style={{ width: `${conversionStats.rate}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all duration-1000"></div>
-                </div>
-              </div>
+        {/* Time Filter Bar */}
+        <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-2">
+          <div className="flex bg-slate-100 p-1 rounded-lg">
+            {[
+              { id: 'today', label: 'Hôm nay' },
+              { id: 'yesterday', label: 'Hôm qua' },
+              { id: 'this_week', label: 'Tuần này' },
+              { id: 'last_week', label: 'Tuần trước' },
+              { id: 'this_month', label: 'Tháng này' },
+              { id: 'last_month', label: 'Tháng trước' },
+              { id: 'custom', label: 'Tùy chỉnh' },
+            ].map(btn => (
+              <button
+                key={btn.id}
+                onClick={() => setTimeRange(btn.id as TimeRange)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeRange === btn.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
 
-              <div className="grid grid-cols-1 gap-3">
-                {Object.entries(conversionStats.statusCounts).sort(([,a], [,b]) => (b as number) - (a as number)).map(([status, count]) => (
-                  <div key={status} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <span className="text-sm font-medium text-slate-600 uppercase tracking-wide">{status}</span>
-                    <span className="text-sm font-bold text-slate-800">{count} lead</span>
-                  </div>
-                ))}
-              </div>
+          {timeRange === 'custom' && (
+            <div className="flex items-center space-x-2 ml-2 animate-fade-in">
+              <input 
+                type="date" 
+                value={customRange.start} 
+                onChange={e => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
+                className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none"
+              />
+              <span className="text-slate-400">→</span>
+              <input 
+                type="date" 
+                value={customRange.end} 
+                onChange={e => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
+                className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none"
+              />
             </div>
-          </section>
-
-          {/* Sources breakdown */}
-          <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-              </svg>
-              Nguồn khách hàng (Top 8)
-            </h3>
-            <div className="space-y-4">
-              {sourceStats.counts.map(([source, count]) => {
-                const percentage = sourceStats.total > 0 ? (count / sourceStats.total) * 100 : 0;
-                return (
-                  <div key={source} className="group">
-                    <div className="flex justify-between items-center mb-1 text-sm">
-                      <span className="font-medium text-slate-700">{source}</span>
-                      <span className="font-bold text-slate-500">{count} KH ({percentage.toFixed(0)}%)</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" 
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })}
-              {sourceStats.counts.length === 0 && (
-                <div className="text-center py-10 text-slate-400">Chưa có dữ liệu nguồn khách hàng.</div>
-              )}
-            </div>
-          </section>
+          )}
+          
+          <div className="ml-auto text-[10px] font-bold text-slate-400 uppercase pr-2">
+            {dateFilter.start.toLocaleDateString('vi-VN')} - {dateFilter.end.toLocaleDateString('vi-VN')}
+          </div>
         </div>
+      </header>
 
-        {/* Revenue per Service - Bar Chart */}
-        <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Doanh thu theo Dịch vụ (Top 10)
-          </h3>
-          <div className="space-y-5">
-            {revenueStats.services.map(([service, revenue]) => {
-              const maxRevenue = revenueStats.services[0][1];
-              const percentage = (revenue / maxRevenue) * 100;
+      {/* KPI Section */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-green-200 transition-colors">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tổng Doanh Thu</p>
+          <p className="text-2xl font-black text-green-600 mt-1">{formatCurrency(ceoStats.totalRevenue)}</p>
+          <p className="text-[10px] text-slate-400 mt-2 font-medium italic">* Doanh số trong kỳ</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-blue-200 transition-colors">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Giá trị TB đơn (AOV)</p>
+          <p className="text-2xl font-black text-blue-600 mt-1">{formatCurrency(ceoStats.avgOrderValue)}</p>
+          <p className="text-[10px] text-blue-400 mt-2 font-bold uppercase">Hiệu suất đơn</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-indigo-200 transition-colors">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tỷ lệ chốt đơn</p>
+          <p className="text-2xl font-black text-indigo-600 mt-1">{ceoStats.conversionRate.toFixed(1)}%</p>
+          <div className="w-full bg-slate-100 h-1 rounded-full mt-3">
+              <div className="bg-indigo-500 h-1 rounded-full transition-all duration-1000" style={{width: `${ceoStats.conversionRate}%`}}></div>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-slate-300 transition-colors">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cơ hội mới (Lead)</p>
+          <p className="text-2xl font-black text-slate-800 mt-1">{ceoStats.totalLeads}</p>
+          <p className="text-[10px] text-slate-400 mt-2 font-medium">Chốt được: {ceoStats.completedLeads}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Activities Feed */}
+        <section className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[600px]">
+          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center uppercase tracking-tight">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Mọi hoạt động hệ thống
+            </h3>
+            <div className="flex items-center space-x-2">
+                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Live Feed</span>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+            {recentActivities.map((act, i) => {
+              const isOrder = act.type === 'order';
+              const actDate = new Date(act.date);
+              const isInPeriod = actDate >= dateFilter.start && actDate <= dateFilter.end;
+
               return (
-                <div key={service} className="relative">
-                  <div className="flex justify-between items-end mb-1">
-                    <span className="text-sm font-bold text-slate-700 truncate max-w-[70%]">{service}</span>
-                    <span className="text-xs font-bold text-green-600">{formatCurrency(revenue)}</span>
+                <div key={`${act.id}-${i}`} className={`flex gap-3 group relative transition-opacity ${isInPeriod ? 'opacity-100' : 'opacity-50'}`}>
+                  <div className="flex flex-col items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center border shadow-sm ${isOrder ? 'bg-green-50 border-green-200 text-green-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}>
+                       {isOrder ? <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg> : <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>}
+                    </div>
+                    {i !== recentActivities.length - 1 && <div className="w-0.5 h-full bg-slate-100 my-1"></div>}
                   </div>
-                  <div className="w-full bg-slate-50 rounded-lg h-8 overflow-hidden">
-                    <div 
-                      className="bg-green-100 border-r-4 border-green-500 h-full transition-all duration-1000 flex items-center px-3" 
-                      style={{ width: `${percentage}%` }}
-                    >
+                  <div className={`flex-1 p-3 rounded-xl border transition-all ${isOrder ? 'bg-green-50/30 border-green-100' : 'bg-white border-slate-100 group-hover:border-blue-200 shadow-sm'}`}>
+                    <div className="flex justify-between items-start mb-1">
+                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{actDate.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})} • {actDate.toLocaleDateString('vi-VN')}</span>
+                       {isOrder && <span className="text-xs font-black text-green-700">+{formatCurrency((act as any).revenue)}</span>}
+                    </div>
+                    <p className="text-xs font-bold text-slate-800 leading-relaxed">
+                      <span className="text-blue-600 font-black">{act.user}</span>: {act.content.replace(/\[PHẢN HỒI\]|\[CHỐT ĐƠN\]/g, '').trim()}
+                    </p>
+                    <div className="flex justify-between items-center mt-2">
+                        <p className="text-[10px] text-slate-500 font-medium">Khách: <span className="text-slate-700 font-bold">{act.customer}</span></p>
+                        {!isInPeriod && <span className="text-[9px] text-slate-300 font-bold uppercase italic">Ngoài kỳ lọc</span>}
                     </div>
                   </div>
                 </div>
               );
             })}
-            {revenueStats.services.length === 0 && (
-                <div className="text-center py-10 text-slate-400">Chưa có dữ liệu đơn hàng thành công.</div>
-            )}
           </div>
         </section>
+
+        {/* Sidebar Reports */}
+        <div className="space-y-6">
+          {/* Top Sales Performance */}
+          <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-tight flex items-center">
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-yellow-500" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+               Xếp hạng Sale (Trong kỳ)
+            </h3>
+            <div className="space-y-3">
+              {salesPerformance.map((s, i) => (
+                <div key={s.id} className="flex items-center gap-3">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${i === 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {i + 1}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                      <span className="truncate max-w-[100px]">{s.name}</span>
+                      <span className="text-green-600">{formatCurrency(s.revenue)}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-green-500 h-full rounded-full transition-all duration-500" style={{ width: `${(s.revenue / (salesPerformance[0]?.revenue || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {salesPerformance.length === 0 && <p className="text-xs text-slate-400 italic text-center py-4">Không có doanh thu trong kỳ</p>}
+            </div>
+          </section>
+
+          {/* Sources Analysis */}
+          <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-tight flex items-center">
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
+               Kênh Lead (Trong kỳ)
+            </h3>
+            <div className="space-y-4">
+              {sourceStats.counts.map(([source, count]) => {
+                const percentage = sourceStats.total > 0 ? (count / sourceStats.total) * 100 : 0;
+                return (
+                  <div key={source}>
+                    <div className="flex justify-between items-center mb-1 text-[11px] font-bold text-slate-600 uppercase">
+                      <span className="truncate max-w-[120px]">{source}</span>
+                      <span>{count} Lead ({percentage.toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-50 rounded-full h-1.5 border border-slate-100">
+                      <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })}
+              {sourceStats.counts.length === 0 && <p className="text-xs text-slate-400 italic text-center py-4">Không có lead mới trong kỳ</p>}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
