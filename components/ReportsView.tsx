@@ -1,10 +1,11 @@
 
 import React, { useMemo, useState } from 'react';
-import { Lead, Order, CustomerData, Sale } from '../types';
+import { Lead, Order, CustomerData, Sale, CskhItem } from '../types';
 
 interface ReportsViewProps {
   leads: Lead[];
   orders: Order[];
+  cskhItems: CskhItem[];
   customers: Record<string, CustomerData>;
   sources: string[];
   sales?: Sale[];
@@ -14,7 +15,7 @@ type TimeRange = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
 
-const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sources, sales = [] }) => {
+const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, customers, sources, sales = [] }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('this_month');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
 
@@ -79,26 +80,63 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sou
       const d = new Date(o.createdAt);
       return d >= dateFilter.start && d <= dateFilter.end;
     });
-    return { leads: fLeads, orders: fOrders };
-  }, [leads, orders, dateFilter]);
+    const fCskh = cskhItems.filter(c => {
+      const d = new Date(c.createdAt);
+      return d >= dateFilter.start && d <= dateFilter.end;
+    });
+    return { leads: fLeads, orders: fOrders, cskh: fCskh };
+  }, [leads, orders, cskhItems, dateFilter]);
 
-  // 3. Chỉ số CEO Metrics (Dựa trên dữ liệu đã lọc)
+  // 3. Chỉ số CEO Metrics
   const ceoStats = useMemo(() => {
+    // 3.1. Revenue & Orders
+    const completedOrders = filteredData.orders.filter(o => o.status === 'completed');
+    const totalRevenue = completedOrders.reduce((sum, o) => sum + o.revenue, 0);
+    const payingOrders = completedOrders.filter(o => o.revenue > 0);
+    const avgOrderValue = payingOrders.length > 0 ? totalRevenue / payingOrders.length : 0;
+
+    // 3.2. Leads & Conversion
     const totalLeads = filteredData.leads.length;
     const completedLeads = filteredData.leads.filter(l => l.status === 'completed').length;
     const conversionRate = totalLeads > 0 ? (completedLeads / totalLeads) * 100 : 0;
-
-    const completedOrders = filteredData.orders.filter(o => o.status === 'completed');
-    const totalRevenue = completedOrders.reduce((sum, o) => sum + o.revenue, 0);
-    const avgOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
-
-    const statusCounts: Record<string, number> = {};
+    
+    const leadStatusCounts: Record<string, number> = {};
     filteredData.leads.forEach(l => {
-      statusCounts[l.status] = (statusCounts[l.status] || 0) + 1;
+      leadStatusCounts[l.status] = (leadStatusCounts[l.status] || 0) + 1;
     });
 
-    return { totalLeads, completedLeads, conversionRate, totalRevenue, avgOrderValue, statusCounts };
-  }, [filteredData]);
+    // 3.3. Potential Revenue (Dự thu từ cơ hội đang mở)
+    const activeLeads = leads.filter(l => !['completed', 'lost'].includes(l.status));
+    const potentialRevenue = activeLeads.reduce((sum, l) => sum + (l.potentialRevenue || 0), 0);
+
+    // 3.4. CSKH Stats
+    const totalCskhTickets = filteredData.cskh.length;
+    const activeCskhTickets = filteredData.cskh.filter(c => c.status !== 'cskh_done');
+    const completedCskhTickets = filteredData.cskh.filter(c => c.status === 'cskh_done').length;
+    const complaintTickets = filteredData.cskh.filter(c => c.status === 'cskh_complaint').length;
+    const cskhCompletionRate = totalCskhTickets > 0 ? (completedCskhTickets / totalCskhTickets) * 100 : 0;
+
+    const cskhStatusCounts: Record<string, number> = {};
+    filteredData.cskh.forEach(c => {
+      cskhStatusCounts[c.status] = (cskhStatusCounts[c.status] || 0) + 1;
+    });
+
+    return { 
+      totalRevenue, 
+      avgOrderValue, 
+      conversionRate, 
+      totalLeads, 
+      completedLeads, 
+      potentialRevenue,
+      payingOrderCount: payingOrders.length,
+      leadStatusCounts,
+      totalCskhTickets,
+      activeCskhCount: activeCskhTickets.length,
+      complaintTickets,
+      cskhCompletionRate,
+      cskhStatusCounts
+    };
+  }, [filteredData, leads]);
 
   // 4. Hiệu suất Sale
   const salesPerformance = useMemo(() => {
@@ -112,12 +150,13 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sou
       .map(([id, revenue]) => ({
         id,
         name: sales.find(s => s.id === id)?.name || 'Chưa gán',
-        revenue
+        // FIX: Explicitly cast revenue as number to avoid arithmetic operation errors in some TS environments
+        revenue: revenue as number
       }))
       .sort((a, b) => b.revenue - a.revenue);
   }, [filteredData.orders, sales]);
 
-  // 5. Hoạt động gần đây (Luôn hiển thị mới nhất nhưng đánh dấu mục trong khoảng lọc)
+  // 5. Hoạt động gần đây
   const recentActivities = useMemo(() => {
     const notes = leads.flatMap(l => l.notes.map(n => ({
       id: n.id,
@@ -143,24 +182,13 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sou
       .slice(0, 20);
   }, [leads, orders, sales, customers]);
 
-  // 6. Nguồn khách hàng
-  const sourceStats = useMemo(() => {
-    const counts: Record<string, number> = {};
-    filteredData.leads.forEach(l => {
-      const src = l.source || 'Không xác định';
-      counts[src] = (counts[src] || 0) + 1;
-    });
-    const sorted = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 6);
-    return { counts: sorted, total: filteredData.leads.length };
-  }, [filteredData.leads]);
-
   return (
     <div className="p-4 sm:p-6 bg-slate-50 min-h-full space-y-6">
       <header className="flex flex-col space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Bảng điều khiển CEO</h2>
-            <p className="text-sm text-slate-500 mt-1">Kiểm soát hiệu suất kinh doanh theo thời gian</p>
+            <p className="text-sm text-slate-500 mt-1">Hệ thống đo lường hiệu suất vận hành Spa</p>
           </div>
           <div className="flex items-center space-x-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
               <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
@@ -192,19 +220,9 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sou
 
           {timeRange === 'custom' && (
             <div className="flex items-center space-x-2 ml-2 animate-fade-in">
-              <input 
-                type="date" 
-                value={customRange.start} 
-                onChange={e => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
-                className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none"
-              />
+              <input type="date" value={customRange.start} onChange={e => setCustomRange(prev => ({ ...prev, start: e.target.value }))} className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none"/>
               <span className="text-slate-400">→</span>
-              <input 
-                type="date" 
-                value={customRange.end} 
-                onChange={e => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
-                className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none"
-              />
+              <input type="date" value={customRange.end} onChange={e => setCustomRange(prev => ({ ...prev, end: e.target.value }))} className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none"/>
             </div>
           )}
           
@@ -214,29 +232,58 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sou
         </div>
       </header>
 
-      {/* KPI Section */}
+      {/* KPI Section - Financial */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-green-200 transition-colors">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tổng Doanh Thu</p>
           <p className="text-2xl font-black text-green-600 mt-1">{formatCurrency(ceoStats.totalRevenue)}</p>
-          <p className="text-[10px] text-slate-400 mt-2 font-medium italic">* Doanh số trong kỳ</p>
+          <p className="text-[10px] text-slate-400 mt-2 font-medium italic">* Doanh số thực thu</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-orange-200 transition-colors">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tổng Dự Thu (Cơ hội)</p>
+          <p className="text-2xl font-black text-orange-600 mt-1">{formatCurrency(ceoStats.potentialRevenue)}</p>
+          <p className="text-[10px] text-orange-400 mt-2 font-bold uppercase italic">Tổng Lead đang theo</p>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-blue-200 transition-colors">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Giá trị TB đơn (AOV)</p>
           <p className="text-2xl font-black text-blue-600 mt-1">{formatCurrency(ceoStats.avgOrderValue)}</p>
-          <p className="text-[10px] text-blue-400 mt-2 font-bold uppercase">Hiệu suất đơn</p>
+          <p className="text-[10px] text-blue-400 mt-2 font-bold uppercase italic">Loại trừ {ceoStats.leadStatusCounts['completed'] - ceoStats.payingOrderCount || 0} đơn 0đ</p>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-indigo-200 transition-colors">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tỷ lệ chốt đơn</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tỷ lệ chốt Sale</p>
           <p className="text-2xl font-black text-indigo-600 mt-1">{ceoStats.conversionRate.toFixed(1)}%</p>
           <div className="w-full bg-slate-100 h-1 rounded-full mt-3">
               <div className="bg-indigo-500 h-1 rounded-full transition-all duration-1000" style={{width: `${ceoStats.conversionRate}%`}}></div>
           </div>
         </div>
+      </div>
+
+      {/* KPI Section - Operational CSKH */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-purple-200 transition-colors">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">CSKH Đang xử lý</p>
+          <div className="flex items-center justify-between">
+              <p className="text-2xl font-black text-purple-600 mt-1">{ceoStats.activeCskhCount}</p>
+              <span className="text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded font-bold">Phiếu</span>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2 font-medium">Hỏi thăm: {ceoStats.cskhStatusCounts['cskh_1_3_days'] || 0}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-red-200 transition-colors">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Khiếu nại chưa xử lý</p>
+          <p className="text-2xl font-black text-red-600 mt-1">{ceoStats.complaintTickets}</p>
+          <p className="text-[10px] text-red-400 mt-2 font-bold uppercase animate-pulse">Cần giải quyết ngay</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-emerald-200 transition-colors">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tỷ lệ hoàn tất CSKH</p>
+          <p className="text-2xl font-black text-emerald-600 mt-1">{ceoStats.cskhCompletionRate.toFixed(0)}%</p>
+          <div className="w-full bg-slate-100 h-1 rounded-full mt-3">
+              <div className="bg-emerald-500 h-1 rounded-full transition-all duration-1000" style={{width: `${ceoStats.cskhCompletionRate}%`}}></div>
+          </div>
+        </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-slate-300 transition-colors">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cơ hội mới (Lead)</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lead Mới Trong Kỳ</p>
           <p className="text-2xl font-black text-slate-800 mt-1">{ceoStats.totalLeads}</p>
-          <p className="text-[10px] text-slate-400 mt-2 font-medium">Chốt được: {ceoStats.completedLeads}</p>
+          <p className="text-[10px] text-slate-400 mt-2 font-medium">Nguồn chính: Facebook</p>
         </div>
       </div>
 
@@ -246,11 +293,9 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sou
           <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
             <h3 className="text-sm font-bold text-slate-800 flex items-center uppercase tracking-tight">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              Mọi hoạt động hệ thống
+              Hoạt động hệ thống thời gian thực
             </h3>
-            <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Live Feed</span>
-            </div>
+            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Live Feed</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
             {recentActivities.map((act, i) => {
@@ -291,51 +336,61 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, customers, sou
           <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
             <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-tight flex items-center">
                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-yellow-500" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
-               Xếp hạng Sale (Trong kỳ)
+               Xếp hạng Sale (Theo doanh thu)
             </h3>
             <div className="space-y-3">
-              {salesPerformance.map((s, i) => (
-                <div key={s.id} className="flex items-center gap-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${i === 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>
-                    {i + 1}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
-                      <span className="truncate max-w-[100px]">{s.name}</span>
-                      <span className="text-green-600">{formatCurrency(s.revenue)}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-green-500 h-full rounded-full transition-all duration-500" style={{ width: `${(s.revenue / (salesPerformance[0]?.revenue || 1)) * 100}%` }}></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {salesPerformance.length === 0 && <p className="text-xs text-slate-400 italic text-center py-4">Không có doanh thu trong kỳ</p>}
-            </div>
-          </section>
-
-          {/* Sources Analysis */}
-          <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-tight flex items-center">
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
-               Kênh Lead (Trong kỳ)
-            </h3>
-            <div className="space-y-4">
-              {sourceStats.counts.map(([source, count]) => {
-                const percentage = sourceStats.total > 0 ? (count / sourceStats.total) * 100 : 0;
+              {salesPerformance.map((s, i) => {
+                // FIX: Guard against division by zero and ensure numeric types for arithmetic
+                const maxRevenue = Number(salesPerformance[0]?.revenue) || 1;
+                const widthPercent = (Number(s.revenue) / maxRevenue) * 100;
+                
                 return (
-                  <div key={source}>
-                    <div className="flex justify-between items-center mb-1 text-[11px] font-bold text-slate-600 uppercase">
-                      <span className="truncate max-w-[120px]">{source}</span>
-                      <span>{count} Lead ({percentage.toFixed(0)}%)</span>
+                  <div key={s.id} className="flex items-center gap-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${i === 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {i + 1}
                     </div>
-                    <div className="w-full bg-slate-50 rounded-full h-1.5 border border-slate-100">
-                      <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${percentage}%` }}></div>
+                    <div className="flex-1">
+                      <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                        <span className="truncate max-w-[100px]">{s.name}</span>
+                        <span className="text-green-600">{formatCurrency(s.revenue)}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-green-500 h-full rounded-full transition-all duration-500" style={{ width: `${widthPercent}%` }}></div>
+                      </div>
                     </div>
                   </div>
                 );
               })}
-              {sourceStats.counts.length === 0 && <p className="text-xs text-slate-400 italic text-center py-4">Không có lead mới trong kỳ</p>}
+              {salesPerformance.length === 0 && <p className="text-xs text-slate-400 italic text-center py-4">Không có doanh thu trong kỳ</p>}
+            </div>
+          </section>
+
+          {/* Marketing Channels */}
+          <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-tight flex items-center">
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
+               Top nguồn Lead mới
+            </h3>
+            <div className="space-y-4">
+              {Object.entries(ceoStats.leadStatusCounts).length > 0 ? (
+                  Object.entries(ceoStats.leadStatusCounts).slice(0, 5).map(([status, count]) => {
+                    // FIX: Ensure count is treated as a number for arithmetic operation
+                    const percentage = ceoStats.totalLeads > 0 ? (Number(count) / ceoStats.totalLeads) * 100 : 0;
+                    return (
+                      <div key={status}>
+                        <div className="flex justify-between items-center mb-1 text-[11px] font-bold text-slate-600 uppercase">
+                          <span className="truncate max-w-[120px]">{status.replace('new', 'Mới').replace('contacting', 'Liên hệ').replace('scheduled', 'Hẹn').replace('completed', 'Chốt')}</span>
+                          <span>{count} KH ({percentage.toFixed(0)}%)</span>
+                        </div>
+                        <div className="w-full bg-slate-50 rounded-full h-1.5 border border-slate-100">
+                          <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${percentage}%` }}></div>
+                        </div>
+                      </div>
+                    );
+                  })
+              ) : (
+                <p className="text-xs text-slate-400 italic text-center py-4">Không có lead mới trong kỳ</p>
+              )}
             </div>
           </section>
         </div>

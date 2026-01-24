@@ -969,7 +969,7 @@ function App() {
             </div>
         )}
         <main className="flex-1 overflow-auto bg-white">
-          {activeView === 'dashboard' && <ReportsView leads={leads} orders={orders} customers={customersData} sources={sources} sales={sales} />}
+          {activeView === 'dashboard' && <ReportsView leads={leads} orders={orders} customers={customersData} sources={sources} sales={sales} cskhItems={cskhItems} />}
           {activeView === 'sales' && (
             <KanbanBoard 
                 leads={leads} 
