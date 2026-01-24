@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { Lead, Order, CustomerData, Sale, CskhItem } from '../types';
 
@@ -100,9 +99,27 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
     const completedLeads = filteredData.leads.filter(l => l.status === 'completed').length;
     const conversionRate = totalLeads > 0 ? (completedLeads / totalLeads) * 100 : 0;
     
+    // Thống kê theo Trạng thái
     const leadStatusCounts: Record<string, number> = {};
     filteredData.leads.forEach(l => {
       leadStatusCounts[l.status] = (leadStatusCounts[l.status] || 0) + 1;
+    });
+
+    // FIX: Thống kê theo Nguồn (Source) thực tế
+    const leadSourceCounts: Record<string, number> = {};
+    filteredData.leads.forEach(l => {
+      const src = l.source || 'Không xác định';
+      leadSourceCounts[src] = (leadSourceCounts[src] || 0) + 1;
+    });
+
+    // Tìm nguồn chính (có số lượng lớn nhất)
+    let mainSource = 'Chưa có dữ liệu';
+    let maxCount = 0;
+    Object.entries(leadSourceCounts).forEach(([src, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mainSource = src;
+      }
     });
 
     // 3.3. Potential Revenue (Dự thu từ cơ hội đang mở)
@@ -130,6 +147,8 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       potentialRevenue,
       payingOrderCount: payingOrders.length,
       leadStatusCounts,
+      leadSourceCounts,
+      mainSource,
       totalCskhTickets,
       activeCskhCount: activeCskhTickets.length,
       complaintTickets,
@@ -150,7 +169,6 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       .map(([id, revenue]) => ({
         id,
         name: sales.find(s => s.id === id)?.name || 'Chưa gán',
-        // FIX: Explicitly cast revenue as number to avoid arithmetic operation errors in some TS environments
         revenue: revenue as number
       }))
       .sort((a, b) => b.revenue - a.revenue);
@@ -158,7 +176,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
 
   // 5. Hoạt động gần đây
   const recentActivities = useMemo(() => {
-    const notes = leads.flatMap(l => l.notes.map(n => ({
+    const notes = leads.flatMap(l => (l.notes || []).map(n => ({
       id: n.id,
       type: 'note',
       content: n.content,
@@ -283,7 +301,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-slate-300 transition-colors">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lead Mới Trong Kỳ</p>
           <p className="text-2xl font-black text-slate-800 mt-1">{ceoStats.totalLeads}</p>
-          <p className="text-[10px] text-slate-400 mt-2 font-medium">Nguồn chính: Facebook</p>
+          <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase">Nguồn chính: <span className="text-blue-600">{ceoStats.mainSource}</span></p>
         </div>
       </div>
 
@@ -340,7 +358,6 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
             </h3>
             <div className="space-y-3">
               {salesPerformance.map((s, i) => {
-                // FIX: Guard against division by zero and ensure numeric types for arithmetic
                 const maxRevenue = Number(salesPerformance[0]?.revenue) || 1;
                 const widthPercent = (Number(s.revenue) / maxRevenue) * 100;
                 
@@ -365,29 +382,32 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
             </div>
           </section>
 
-          {/* Marketing Channels */}
+          {/* Marketing Channels - FIXED TO USE SOURCE INSTEAD OF STATUS */}
           <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
             <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-tight flex items-center">
                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
                Top nguồn Lead mới
             </h3>
             <div className="space-y-4">
-              {Object.entries(ceoStats.leadStatusCounts).length > 0 ? (
-                  Object.entries(ceoStats.leadStatusCounts).slice(0, 5).map(([status, count]) => {
-                    // FIX: Ensure count is treated as a number for arithmetic operation
-                    const percentage = ceoStats.totalLeads > 0 ? (Number(count) / ceoStats.totalLeads) * 100 : 0;
-                    return (
-                      <div key={status}>
-                        <div className="flex justify-between items-center mb-1 text-[11px] font-bold text-slate-600 uppercase">
-                          <span className="truncate max-w-[120px]">{status.replace('new', 'Mới').replace('contacting', 'Liên hệ').replace('scheduled', 'Hẹn').replace('completed', 'Chốt')}</span>
-                          <span>{count} KH ({percentage.toFixed(0)}%)</span>
+              {Object.entries(ceoStats.leadSourceCounts).length > 0 ? (
+                  Object.entries(ceoStats.leadSourceCounts)
+                    // FIX: Explicitly cast to any or number to avoid arithmetic operation errors on line 395
+                    .sort(([, a], [, b]) => (b as any) - (a as any))
+                    .slice(0, 5)
+                    .map(([source, count]) => {
+                      const percentage = ceoStats.totalLeads > 0 ? (Number(count) / ceoStats.totalLeads) * 100 : 0;
+                      return (
+                        <div key={source}>
+                          <div className="flex justify-between items-center mb-1 text-[11px] font-bold text-slate-600 uppercase">
+                            <span className="truncate max-w-[120px]">{source}</span>
+                            <span>{count} KH ({percentage.toFixed(0)}%)</span>
+                          </div>
+                          <div className="w-full bg-slate-50 rounded-full h-1.5 border border-slate-100">
+                            <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${percentage}%` }}></div>
+                          </div>
                         </div>
-                        <div className="w-full bg-slate-50 rounded-full h-1.5 border border-slate-100">
-                          <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${percentage}%` }}></div>
-                        </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })
               ) : (
                 <p className="text-xs text-slate-400 italic text-center py-4">Không có lead mới trong kỳ</p>
               )}
