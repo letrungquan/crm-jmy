@@ -10,6 +10,7 @@ interface SaleDashboardProps {
   currentUser: string;
   onSelectLead: (lead: Lead) => void;
   onSelectCskh: (item: CskhItem) => void;
+  onReceiveLead?: (leadId: string) => void;
 }
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
@@ -21,7 +22,8 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
   customers, 
   currentUser,
   onSelectLead,
-  onSelectCskh
+  onSelectCskh,
+  onReceiveLead
 }) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -72,10 +74,10 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
       }).sort((a, b) => new Date(a.appointmentDate!).getTime() - new Date(b.appointmentDate!).getTime());
   }, [myLeads, today]);
 
-  // 3.2 Lead mới chưa xử lý (Cần gọi ngay)
+  // 3.2 Lead mới chưa xử lý (Cần gọi ngay) - Bao gồm của mình và chưa gán
   const newLeadsToCall = useMemo(() => {
-      return myLeads.filter(l => l.status === 'new');
-  }, [myLeads]);
+      return leads.filter(l => l.status === 'new' && (!l.assignedTo || l.assignedTo === currentUser));
+  }, [leads, currentUser]);
 
   // 3.3 CSKH cần tương tác (Dựa trên trạng thái)
   const cskhTasks = useMemo(() => {
@@ -203,10 +205,23 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                               <div>
                                   <p className="font-bold text-slate-800 text-sm">{lead.name}</p>
                                   <p className="text-xs text-slate-500 mt-1">Nguồn: <span className="font-medium text-slate-700">{lead.source}</span> • <span className="text-slate-400">{new Date(lead.createdAt).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span></p>
+                                  {!lead.assignedTo && <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1 rounded mt-1 inline-block">Chưa gán</span>}
                               </div>
-                              <button className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded shadow-sm transition-colors">
-                                  Gọi ngay
-                              </button>
+                              {lead.assignedTo ? (
+                                  <button className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded shadow-sm transition-colors">
+                                      Gọi ngay
+                                  </button>
+                              ) : (
+                                  <button 
+                                      onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (onReceiveLead) onReceiveLead(lead.id);
+                                      }}
+                                      className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded shadow-sm transition-colors animate-pulse"
+                                  >
+                                      Nhận lead
+                                  </button>
+                              )}
                           </div>
                       )) : (
                           <div className="p-8 text-center text-slate-400 text-sm">Tuyệt vời! Bạn đã xử lý hết lead mới.</div>

@@ -879,6 +879,15 @@ function App() {
                               setSelectedLead(ghostLead);
                           }
                       }}
+                      onReceiveLead={async (id) => {
+                          if (useLocalOnly) {
+                               const newLeads = leads.map(l => l.id === id ? { ...l, assignedTo: currentUser, status: 'contacting', updatedAt: new Date().toISOString() } : l);
+                               setLeads(newLeads); setLocalLeads(newLeads);
+                          } else {
+                              const { error } = await supabase.from('leads').update({ assigned_to: currentUser, status: 'contacting', updated_at: new Date().toISOString() }).eq('id', id);
+                              if (error) alert(formatErrorMessage(error));
+                          }
+                      }}
                   />
               )
           )}
