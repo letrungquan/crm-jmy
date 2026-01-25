@@ -13,6 +13,7 @@ import {
 import Sidebar from './components/Sidebar';
 import MainHeader from './components/MainHeader';
 import ReportsView from './components/ReportsView';
+import SaleDashboard from './components/SaleDashboard';
 import KanbanBoard from './components/KanbanBoard';
 import CskhView from './components/CskhView';
 import CustomerList from './components/CustomerList';
@@ -848,7 +849,39 @@ function App() {
             </div>
         )}
         <main className="flex-1 overflow-auto bg-white">
-          {activeView === 'dashboard' && <ReportsView leads={leads} orders={orders} customers={customersData} sources={sources} sales={sales} cskhItems={cskhItems} />}
+          {activeView === 'dashboard' && (
+              // Logic hiển thị Dashboard: Admin xem ReportsView, Sale xem SaleDashboard
+              isAdmin ? (
+                  <ReportsView leads={leads} orders={orders} customers={customersData} sources={sources} sales={sales} cskhItems={cskhItems} />
+              ) : (
+                  <SaleDashboard 
+                      leads={leads} 
+                      cskhItems={cskhItems} 
+                      orders={orders} 
+                      customers={customersData} 
+                      currentUser={currentUser}
+                      onSelectLead={setSelectedLead}
+                      onSelectCskh={(item) => {
+                          // Tái sử dụng logic mở LeadDetail từ CSKH Item (giống trong CskhView)
+                          const lead = leads.find(l => l.id === item.originalLeadId);
+                          if (lead) setSelectedLead(lead);
+                          else {
+                              // Fallback nếu không tìm thấy lead gốc (ghost lead để xem chi tiết)
+                              const ghostLead: Lead = {
+                                  id: item.originalLeadId || `ghost_${item.id}`,
+                                  name: item.customerName, phone: item.customerPhone, source: 'Unknown',
+                                  assignedTo: item.assignedTo, status: 'completed', cskhStatus: item.status,
+                                  service: item.service, description: 'Dữ liệu CSKH (Không tìm thấy cơ hội gốc)',
+                                  priority: null, potentialRevenue: 0, notes: [],
+                                  createdAt: item.createdAt, updatedAt: item.updatedAt,
+                                  appointmentDate: null, projectedAppointmentDate: null
+                              };
+                              setSelectedLead(ghostLead);
+                          }
+                      }}
+                  />
+              )
+          )}
           {activeView === 'sales' && (
             <KanbanBoard 
                 leads={leads} sales={sales} statuses={statuses} onSelectLead={setSelectedLead} 

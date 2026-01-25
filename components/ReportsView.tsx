@@ -37,10 +37,16 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
         end.setHours(23, 59, 59, 999);
         break;
       case 'this_week':
-        const day = now.getDay();
+        const day = now.getDay(); // 0 (Sun) -> 6 (Sat)
+        // Tính ngày thứ 2 đầu tuần
         const diff = now.getDate() - day + (day === 0 ? -6 : 1);
         start.setDate(diff);
         start.setHours(0, 0, 0, 0);
+        
+        // FIX: Lấy đến hết Chủ Nhật tuần này (thay vì chỉ đến now)
+        const endOfWeek = new Date(start);
+        endOfWeek.setDate(start.getDate() + 6);
+        end.setTime(endOfWeek.getTime());
         end.setHours(23, 59, 59, 999);
         break;
       case 'last_week':
@@ -54,6 +60,9 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       case 'this_month':
         start.setDate(1);
         start.setHours(0, 0, 0, 0);
+        
+        // FIX: Lấy đến hết ngày cuối cùng của tháng này (thay vì chỉ đến now)
+        end.setMonth(now.getMonth() + 1, 0); 
         end.setHours(23, 59, 59, 999);
         break;
       case 'last_month':

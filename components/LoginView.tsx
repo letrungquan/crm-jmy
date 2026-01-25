@@ -21,14 +21,32 @@ const LoginView: React.FC<LoginViewProps> = () => {
           const ip = data.ip;
           const userAgent = navigator.userAgent;
 
-          // 2. Insert into access_logs
-          await supabase.from('access_logs').insert([
-              {
-                  user_id: userId,
-                  ip: ip,
-                  user_agent: userAgent,
-              }
-          ]);
+          // 2. Check latest log for this user to avoid duplicate entries for same session context
+          const { data: latestLogs } = await supabase
+              .from('access_logs')
+              .select('id, ip, user_agent')
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+              .limit(1);
+
+          const latestLog = latestLogs?.[0];
+
+          if (latestLog && latestLog.ip === ip && latestLog.user_agent === userAgent) {
+              // Update existing log timestamp (created_at acts as "last seen" in this context)
+              await supabase
+                  .from('access_logs')
+                  .update({ created_at: new Date().toISOString() })
+                  .eq('id', latestLog.id);
+          } else {
+              // 3. Insert new log entry
+              await supabase.from('access_logs').insert([
+                  {
+                      user_id: userId,
+                      ip: ip,
+                      user_agent: userAgent,
+                  }
+              ]);
+          }
       } catch (err) {
           console.error("Failed to log access:", err);
           // Don't block login if logging fails
