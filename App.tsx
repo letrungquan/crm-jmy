@@ -860,6 +860,7 @@ function App() {
                       orders={orders} 
                       customers={customersData} 
                       currentUser={currentUser}
+                      sales={sales}
                       onSelectLead={setSelectedLead}
                       onSelectCskh={(item) => {
                           // Tái sử dụng logic mở LeadDetail từ CSKH Item (giống trong CskhView)
@@ -986,7 +987,8 @@ function App() {
                   id: `lead_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
                   name: data.name, phone: data.phone, source: data.source, assigned_to: data.assignedTo, status: data.status,
                   service: data.service, description: data.description, potential_revenue: data.potentialRevenue,
-                  projected_appointment_date: data.projectedAppointmentDate, appointment_date: data.appointmentDate
+                  projected_appointment_date: data.projectedAppointmentDate, appointment_date: data.appointmentDate,
+                  priority: data.priority // Include priority
               }]);
               if (!error) setIsAddModalOpen(false); else alert(formatErrorMessage(error));
           }
@@ -1006,7 +1008,8 @@ function App() {
                          status: updatedLead.status, cskh_status: updatedLead.cskhStatus, assigned_to: updatedLead.assignedTo,
                          potential_revenue: updatedLead.potentialRevenue, service: updatedLead.service,
                          description: updatedLead.description, appointment_date: updatedLead.appointmentDate,
-                         projected_appointment_date: updatedLead.projectedAppointmentDate, updated_at: new Date().toISOString()
+                         projected_appointment_date: updatedLead.projectedAppointmentDate, updated_at: new Date().toISOString(),
+                         priority: updatedLead.priority // Include priority in update
                     }).eq('id', updatedLead.id);
                     if (updatedLead.notes.length > (selectedLead.notes || []).length) {
                         const newNote = updatedLead.notes[0];

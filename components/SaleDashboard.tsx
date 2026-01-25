@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { Lead, Order, CskhItem, CustomerData, StatusConfig } from '../types';
+import { Lead, Order, CskhItem, CustomerData, StatusConfig, Sale } from '../types';
 
 interface SaleDashboardProps {
   leads: Lead[];
@@ -8,6 +8,7 @@ interface SaleDashboardProps {
   orders: Order[];
   customers: Record<string, CustomerData>;
   currentUser: string;
+  sales?: Sale[];
   onSelectLead: (lead: Lead) => void;
   onSelectCskh: (item: CskhItem) => void;
   onReceiveLead?: (leadId: string) => void;
@@ -21,6 +22,7 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
   orders, 
   customers, 
   currentUser,
+  sales = [],
   onSelectLead,
   onSelectCskh,
   onReceiveLead
@@ -28,17 +30,20 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // 1. Dữ liệu cá nhân hóa
+  const getSaleName = (id: string | null | undefined) => {
+      if (!id) return 'Chưa gán';
+      return sales.find(s => s.id === id)?.name || 'Unknown';
+  };
+
+  // 1. Dữ liệu cá nhân hóa (Chỉ dùng cho KPI để Sale theo dõi hiệu suất bản thân)
   const myLeads = useMemo(() => leads.filter(l => l.assignedTo === currentUser), [leads, currentUser]);
-  const myCskh = useMemo(() => cskhItems.filter(c => c.assignedTo === currentUser), [cskhItems, currentUser]);
   const myOrders = useMemo(() => orders.filter(o => o.assignedTo === currentUser), [orders, currentUser]);
 
-  // 2. Tính toán KPI Cá nhân (Tháng này)
+  // 2. Tính toán KPI Cá nhân (Tháng này) - Giữ nguyên logic cá nhân
   const kpiStats = useMemo(() => {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
 
-    // Doanh thu thực tế (Dựa trên đơn hàng hoàn thành trong tháng)
     const currentRevenue = myOrders
         .filter(o => {
             const d = new Date(o.createdAt);
@@ -46,13 +51,11 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
         })
         .reduce((sum, o) => sum + o.revenue, 0);
 
-    // Lead mới trong tháng
     const newLeadsCount = myLeads.filter(l => {
         const d = new Date(l.createdAt);
         return d >= startOfMonth && d <= endOfMonth;
     }).length;
 
-    // Tỷ lệ chuyển đổi (Lead -> Đơn hàng)
     const conversionRate = newLeadsCount > 0 
         ? (myOrders.filter(o => o.status === 'completed' && new Date(o.createdAt) >= startOfMonth).length / newLeadsCount) * 100 
         : 0;
@@ -60,57 +63,55 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
     return { currentRevenue, newLeadsCount, conversionRate };
   }, [myOrders, myLeads, today]);
 
-  // 3. Phân loại tác vụ (Actionable Items)
+  // 3. Phân loại tác vụ (Toàn bộ dữ liệu để hỗ trợ nhau)
   
-  // 3.1 Lịch hẹn hôm nay (Quan trọng nhất)
+  // 3.1 Lịch hẹn hôm nay (Tất cả mọi người)
   const todayAppointments = useMemo(() => {
-      return myLeads.filter(l => {
+      return leads.filter(l => {
           if (!l.appointmentDate) return false;
           const d = new Date(l.appointmentDate);
           return d.getDate() === today.getDate() && 
                  d.getMonth() === today.getMonth() && 
                  d.getFullYear() === today.getFullYear() &&
-                 ['scheduled', 'completed'].includes(l.status); // Chỉ hiện lịch đã đặt hoặc vừa xong
+                 ['scheduled', 'completed'].includes(l.status);
       }).sort((a, b) => new Date(a.appointmentDate!).getTime() - new Date(b.appointmentDate!).getTime());
-  }, [myLeads, today]);
+  }, [leads, today]);
 
-  // 3.2 Lead mới chưa xử lý (Cần gọi ngay) - Bao gồm của mình và chưa gán
+  // 3.2 Lead mới chưa xử lý (Tất cả lead mới)
   const newLeadsToCall = useMemo(() => {
-      return leads.filter(l => l.status === 'new' && (!l.assignedTo || l.assignedTo === currentUser));
-  }, [leads, currentUser]);
+      return leads.filter(l => l.status === 'new');
+  }, [leads]);
 
-  // 3.3 CSKH cần tương tác (Dựa trên trạng thái)
+  // 3.3 CSKH cần tương tác (Tất cả phiếu chưa xong)
   const cskhTasks = useMemo(() => {
-      return myCskh.filter(c => c.status !== 'cskh_done' && c.status !== 'cskh_complaint');
-  }, [myCskh]);
+      return cskhItems.filter(c => c.status !== 'cskh_done' && c.status !== 'cskh_complaint');
+  }, [cskhItems]);
 
-  // 3.4 Khách hàng sinh nhật trong tháng (Cơ hội Upsell)
+  // 3.4 Khách hàng sinh nhật trong tháng (Tất cả khách)
   const birthdayCustomers = useMemo(() => {
       const currentMonth = today.getMonth() + 1;
       return Object.values(customers).filter((c: CustomerData) => {
-          // Lọc khách thuộc quyền quản lý của Sale (hoặc khách chung nếu chính sách cho phép)
-          if (c.assignedTo && c.assignedTo !== currentUser) return false;
           if (!c.dateOfBirth) return false;
           try {
               const dob = new Date(c.dateOfBirth);
               return (dob.getMonth() + 1) === currentMonth;
           } catch { return false; }
       });
-  }, [customers, today, currentUser]);
+  }, [customers, today]);
 
   return (
     <div className="p-4 sm:p-6 bg-slate-50 min-h-full space-y-6">
       <header>
         <h2 className="text-2xl font-bold text-slate-800">Xin chào, chúc bạn một ngày bùng nổ doanh số! 👋</h2>
-        <p className="text-sm text-slate-500 mt-1">Dưới đây là các công việc cần ưu tiên xử lý hôm nay.</p>
+        <p className="text-sm text-slate-500 mt-1">Dưới đây là các công việc của cả team cần ưu tiên xử lý.</p>
       </header>
 
-      {/* KPI Cards */}
+      {/* KPI Cards (Vẫn giữ KPI cá nhân để tạo động lực) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl p-4 text-white shadow-md">
               <div className="flex justify-between items-start">
                   <div>
-                      <p className="text-blue-100 text-xs font-bold uppercase tracking-wider">Doanh số tháng này</p>
+                      <p className="text-blue-100 text-xs font-bold uppercase tracking-wider">Doanh số cá nhân</p>
                       <p className="text-2xl font-bold mt-1">{formatCurrency(kpiStats.currentRevenue)}</p>
                   </div>
                   <div className="p-2 bg-white/20 rounded-lg">
@@ -125,7 +126,7 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
               <div className="flex justify-between items-start">
                   <div>
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Lead mới (Tháng)</p>
+                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Lead mới (Cá nhân)</p>
                       <p className="text-2xl font-bold text-slate-800 mt-1">{kpiStats.newLeadsCount}</p>
                   </div>
                   <div className="p-2 bg-orange-100 rounded-lg">
@@ -140,7 +141,7 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
               <div className="flex justify-between items-start">
                   <div>
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Lịch hẹn hôm nay</p>
+                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Lịch hẹn hôm nay (Team)</p>
                       <p className="text-2xl font-bold text-slate-800 mt-1">{todayAppointments.length}</p>
                   </div>
                   <div className="p-2 bg-purple-100 rounded-lg">
@@ -148,7 +149,7 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                   </div>
               </div>
               <div className="mt-4 text-xs text-slate-500">
-                  Đừng quên gọi nhắc khách trước 1 tiếng.
+                  Tổng lịch hẹn của cả team.
               </div>
           </div>
       </div>
@@ -174,7 +175,12 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                                       <span className="mx-2 text-slate-300">|</span>
                                       <p className="text-sm text-slate-600">{lead.phone}</p>
                                   </div>
-                                  <p className="text-xs text-slate-500 mt-1">{lead.service}</p>
+                                  <div className="flex items-center mt-1 space-x-2">
+                                      <p className="text-xs text-slate-500">{lead.service}</p>
+                                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">
+                                          👤 {getSaleName(lead.assignedTo)}
+                                      </span>
+                                  </div>
                               </div>
                               <div className="text-right">
                                   <p className="text-sm font-bold text-purple-600">
@@ -204,8 +210,14 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                           <div key={lead.id} onClick={() => onSelectLead(lead)} className="p-4 hover:bg-slate-50 cursor-pointer transition-colors flex justify-between items-center">
                               <div>
                                   <p className="font-bold text-slate-800 text-sm">{lead.name}</p>
-                                  <p className="text-xs text-slate-500 mt-1">Nguồn: <span className="font-medium text-slate-700">{lead.source}</span> • <span className="text-slate-400">{new Date(lead.createdAt).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span></p>
-                                  {!lead.assignedTo && <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1 rounded mt-1 inline-block">Chưa gán</span>}
+                                  <div className="flex items-center gap-2 mt-1">
+                                      <p className="text-xs text-slate-500">Nguồn: <span className="font-medium text-slate-700">{lead.source}</span> • <span className="text-slate-400">{new Date(lead.createdAt).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span></p>
+                                      {!lead.assignedTo ? (
+                                          <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1 rounded border border-red-100">Chưa gán</span>
+                                      ) : (
+                                          <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">👤 {getSaleName(lead.assignedTo)}</span>
+                                      )}
+                                  </div>
                               </div>
                               {lead.assignedTo ? (
                                   <button className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded shadow-sm transition-colors">
@@ -224,7 +236,7 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                               )}
                           </div>
                       )) : (
-                          <div className="p-8 text-center text-slate-400 text-sm">Tuyệt vời! Bạn đã xử lý hết lead mới.</div>
+                          <div className="p-8 text-center text-slate-400 text-sm">Tuyệt vời! Đã xử lý hết lead mới.</div>
                       )}
                   </div>
               </div>
@@ -238,7 +250,7 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 border-b border-slate-100 bg-pink-50">
                       <h3 className="font-bold text-pink-800 text-sm flex items-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z" /></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z" /></svg>
                           Sinh nhật tháng này ({birthdayCustomers.length})
                       </h3>
                   </div>
@@ -247,9 +259,14 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                           <div key={c.phone} className="flex items-center p-2 bg-slate-50 rounded border border-slate-100">
                               <div className="flex-1">
                                   <p className="text-xs font-bold text-slate-700">{c.name}</p>
-                                  <p className="text-[10px] text-slate-500">SN: {new Date(c.dateOfBirth!).toLocaleDateString('vi-VN')}</p>
+                                  <div className="flex justify-between items-center mt-0.5">
+                                      <p className="text-[10px] text-slate-500">SN: {new Date(c.dateOfBirth!).toLocaleDateString('vi-VN')}</p>
+                                      <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded border border-slate-200">
+                                          {getSaleName(c.assignedTo)}
+                                      </span>
+                                  </div>
                               </div>
-                              <button className="text-[10px] text-blue-600 font-bold hover:underline" onClick={() => { /* Logic gọi/nhắn tin */ }}>Gửi SMS</button>
+                              <button className="text-[10px] text-blue-600 font-bold hover:underline ml-2" onClick={() => { /* Logic gọi/nhắn tin */ }}>Gửi SMS</button>
                           </div>
                       )) : <p className="text-xs text-slate-400 text-center py-2">Không có khách sinh nhật tháng này.</p>}
                   </div>
@@ -272,6 +289,9 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                               </div>
                               <p className="text-xs text-slate-600 truncate">{item.service}</p>
                               <div className="mt-2 flex justify-between items-center">
+                                  <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">
+                                      👤 {getSaleName(item.assignedTo)}
+                                  </span>
                                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
                                       item.status.includes('complaint') ? 'bg-red-50 text-red-600 border-red-100' :
                                       item.status.includes('rebook') ? 'bg-orange-50 text-orange-600 border-orange-100' :
