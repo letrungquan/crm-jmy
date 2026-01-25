@@ -870,7 +870,11 @@ function App() {
                           const lead = leads.find(l => l.id === item.originalLeadId);
                           if (lead) {
                               // Inject doctorName from CSKH item to the lead object for the modal
-                              const leadWithDoctor = { ...lead, doctorName: item.doctorName };
+                              const leadWithDoctor = { 
+                                ...lead, 
+                                doctorName: item.doctorName,
+                                cskhStatus: item.status // Sync status from CSKH item
+                              };
                               setSelectedLead(leadWithDoctor);
                           } else {
                               // Fallback nếu không tìm thấy lead gốc (ghost lead để xem chi tiết)
@@ -919,7 +923,11 @@ function App() {
                 onSelectCskh={(item) => {
                     const lead = leads.find(l => l.id === item.originalLeadId);
                     if (lead) {
-                        const leadWithDoctor = { ...lead, doctorName: item.doctorName };
+                        const leadWithDoctor = { 
+                            ...lead, 
+                            doctorName: item.doctorName,
+                            cskhStatus: item.status // Sync status from CSKH item
+                        };
                         setSelectedLead(leadWithDoctor);
                     } else {
                         const ghostLead: Lead = {
@@ -1014,9 +1022,17 @@ function App() {
                     const newLeads = leads.map(l => l.id === updatedLead.id ? updatedLead : l);
                     setLeads(newLeads); setLocalLeads(newLeads); 
                     
-                    // Update CSKH item doctor if changed
-                    if (activeView === 'cskh' && updatedLead.doctorName !== selectedLead.doctorName) {
-                        const updatedCskh = cskhItems.map(item => item.originalLeadId === updatedLead.id ? {...item, doctorName: updatedLead.doctorName} : item);
+                    // Update CSKH item if changed
+                    if (activeView === 'cskh') {
+                        const updatedCskh = cskhItems.map(item => 
+                            item.originalLeadId === updatedLead.id 
+                            ? {
+                                ...item, 
+                                doctorName: updatedLead.doctorName, 
+                                status: updatedLead.cskhStatus || item.status
+                              } 
+                            : item
+                        );
                         setCskhItems(updatedCskh); setLocalCskh(updatedCskh);
                     }
                     setSelectedLead(null);
@@ -1034,9 +1050,20 @@ function App() {
                          await supabase.from('notes').insert([{ id: newNote.id, lead_id: updatedLead.id, content: newNote.content, created_by: currentUser }]);
                     }
 
-                    // Update Doctor Name in CSKH table if context is CSKH and doctorName changed
-                    if (activeView === 'cskh' && updatedLead.doctorName !== selectedLead.doctorName) {
-                        await supabase.from('cskh').update({ doctor_name: updatedLead.doctorName }).eq('original_lead_id', updatedLead.id);
+                    // Update Doctor Name AND Status in CSKH table if context is CSKH
+                    if (activeView === 'cskh') {
+                        const updatePayload: any = {};
+                        if (updatedLead.doctorName !== selectedLead.doctorName) {
+                            updatePayload.doctor_name = updatedLead.doctorName;
+                        }
+                        // Also sync status back to CSKH table if changed in modal
+                        if (updatedLead.cskhStatus && updatedLead.cskhStatus !== selectedLead.cskhStatus) {
+                            updatePayload.status = updatedLead.cskhStatus;
+                        }
+
+                        if (Object.keys(updatePayload).length > 0) {
+                            await supabase.from('cskh').update(updatePayload).eq('original_lead_id', updatedLead.id);
+                        }
                     }
 
                     setSelectedLead(null);

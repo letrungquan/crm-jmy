@@ -59,7 +59,9 @@ const DailyCskhReport: React.FC<DailyCskhReportProps> = ({ cskhItems, leads }) =
 
         // Tính thời gian: (Ngày báo cáo - Ngày tạo)
         // Set cả 2 về 0h00 để tính số ngày chẵn
-        const createdDate = new Date(item.createdAt);
+        // FIX: Sử dụng ngày tạo Lead (nếu có) thay vì ngày tạo phiếu CSKH để tính thời gian theo yêu cầu người dùng
+        const startDateRaw = lead ? lead.createdAt : item.createdAt;
+        const createdDate = new Date(startDateRaw);
         const createdDateMidnight = new Date(createdDate.getFullYear(), createdDate.getMonth(), createdDate.getDate());
         const reportDateMidnight = new Date(year, month - 1, day);
         

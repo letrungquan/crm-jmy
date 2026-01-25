@@ -155,9 +155,6 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
           </div>
       </div>
 
-      {/* --- NEW SECTION: BÁO CÁO CSKH --- */}
-      <DailyCskhReport cskhItems={cskhItems} leads={leads} />
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Cột 1: Quan trọng & Khẩn cấp */}
           <div className="lg:col-span-2 space-y-6">
@@ -245,6 +242,9 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                   </div>
               </div>
 
+              {/* --- BÁO CÁO CSKH --- */}
+              <DailyCskhReport cskhItems={cskhItems} leads={leads} />
+
           </div>
 
           {/* Cột 2: Nhắc nhở & CSKH */}
@@ -264,7 +264,7 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
                               <div className="flex-1">
                                   <p className="text-xs font-bold text-slate-700">{c.name}</p>
                                   <div className="flex justify-between items-center mt-0.5">
-                                      <p className="text-[10px] text-slate-500">SN: {new Date(c.dateOfBirth!).toLocaleDateString('vi-VN')}</p>
+                                      <p className="text-xs text-slate-500">SN: {new Date(c.dateOfBirth!).toLocaleDateString('vi-VN')}</p>
                                       <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded border border-slate-200">
                                           {getSaleName(c.assignedTo)}
                                       </span>
