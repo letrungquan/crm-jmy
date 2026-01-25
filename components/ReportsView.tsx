@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { Lead, Order, CustomerData, Sale, CskhItem } from '../types';
 
@@ -69,7 +70,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
     return { start, end };
   }, [timeRange, customRange]);
 
-  // 2. Lọc dữ liệu theo thời gian
+  // 2. Lọc dữ liệu theo thời gian (Cho các chỉ số đếm số lượng Lead mới, Đơn hàng thực tế)
   const filteredData = useMemo(() => {
     const fLeads = leads.filter(l => {
       const d = new Date(l.createdAt);
@@ -105,7 +106,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       leadStatusCounts[l.status] = (leadStatusCounts[l.status] || 0) + 1;
     });
 
-    // FIX: Thống kê theo Nguồn (Source) thực tế
+    // Thống kê theo Nguồn (Source) thực tế
     const leadSourceCounts: Record<string, number> = {};
     filteredData.leads.forEach(l => {
       const src = l.source || 'Không xác định';
@@ -122,9 +123,46 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       }
     });
 
-    // 3.3. Potential Revenue (Dự thu từ cơ hội đang mở)
-    const activeLeads = leads.filter(l => !['completed', 'lost'].includes(l.status));
-    const potentialRevenue = activeLeads.reduce((sum, l) => sum + (l.potentialRevenue || 0), 0);
+    // 3.3. Potential Revenue (Dự thu)
+    // FIX: Sử dụng logic giống CalendarView để tính tổng dự thu trong khoảng thời gian đã chọn
+    // Lọc dựa trên ngày hẹn/dự kiến thay vì ngày tạo
+    const getLeadRevenueDate = (lead: Lead): Date | null => {
+        let dateStr: string | null = null;
+        let isProjected = false;
+
+        if (['scheduled', 'completed'].includes(lead.status)) {
+            dateStr = lead.appointmentDate;
+        } else {
+            dateStr = lead.projectedAppointmentDate;
+            isProjected = true;
+        }
+
+        if (!dateStr) return null;
+
+        if (isProjected) {
+            try {
+                // Parse ngày dự kiến (thường là YYYY-MM-DD hoặc ISO)
+                const parts = dateStr.split('T');
+                if (parts[0].includes('-')) {
+                    const [y, m, d] = parts[0].split('-').map(Number);
+                    // Dùng mốc 12h trưa để tránh lệch múi giờ
+                    return new Date(y, m - 1, d, 12, 0, 0);
+                }
+            } catch (e) {}
+            return new Date(dateStr);
+        }
+        return new Date(dateStr);
+    };
+
+    const potentialRevenue = leads.reduce((sum, l) => {
+        if (l.status === 'lost') return sum; // Bỏ qua lead thất bại
+        
+        const revDate = getLeadRevenueDate(l);
+        if (revDate && revDate >= dateFilter.start && revDate <= dateFilter.end) {
+            return sum + (l.potentialRevenue || 0);
+        }
+        return sum;
+    }, 0);
 
     // 3.4. CSKH Stats
     const totalCskhTickets = filteredData.cskh.length;
@@ -155,7 +193,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       cskhCompletionRate,
       cskhStatusCounts
     };
-  }, [filteredData, leads]);
+  }, [filteredData, leads, dateFilter]); // Thêm dateFilter vào dependencies để tính toán lại khi đổi ngày
 
   // 4. Hiệu suất Sale
   const salesPerformance = useMemo(() => {
