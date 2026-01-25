@@ -1,6 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { Lead, Order, CskhItem, CustomerData, StatusConfig, Sale } from '../types';
+import DailyCskhReport from './DailyCskhReport';
 
 interface SaleDashboardProps {
   leads: Lead[];
@@ -153,6 +154,9 @@ const SaleDashboard: React.FC<SaleDashboardProps> = ({
               </div>
           </div>
       </div>
+
+      {/* --- NEW SECTION: BÁO CÁO CSKH --- */}
+      <DailyCskhReport cskhItems={cskhItems} leads={leads} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Cột 1: Quan trọng & Khẩn cấp */}

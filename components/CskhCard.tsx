@@ -75,7 +75,14 @@ const CskhCard: React.FC<CskhCardProps> = ({ item, statusConfig, onDelete, onCli
             )}
         </div>
       </div>
-      <p className="text-xs text-slate-500 mt-1">{item.customerPhone}</p>
+      <div className="flex justify-between items-start mt-1">
+          <p className="text-xs text-slate-500">{item.customerPhone}</p>
+          {item.doctorName && (
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                  {item.doctorName}
+              </span>
+          )}
+      </div>
       
       <div className="mt-2.5 space-y-1.5 text-xs">
          <p className="font-medium text-slate-700">{item.service}</p>

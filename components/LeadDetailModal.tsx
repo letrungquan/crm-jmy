@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Lead, Sale, Note, StatusConfig } from '../types';
+import { DOCTORS } from '../constants';
 
 interface LeadDetailModalProps {
   lead: Lead;
@@ -134,10 +135,11 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
                 </p>
               </div>
                <div>
-                <label className="block text-sm font-medium text-slate-600 mb-1">Ngày hoàn thành</label>
-                 <p className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-slate-700 h-10 flex items-center">
-                  {currentLead.appointmentDate ? new Date(currentLead.appointmentDate).toLocaleDateString('vi-VN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                </p>
+                <label className="block text-sm font-medium text-slate-600 mb-1">Bác sĩ thực hiện</label>
+                <select name="doctorName" value={currentLead.doctorName || ''} onChange={handleInputChange} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900">
+                    <option value="">-- Chưa gán --</option>
+                    {DOCTORS.map(dr => <option key={dr} value={dr}>{dr}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-600 mb-1">Dịch vụ tư vấn</label>

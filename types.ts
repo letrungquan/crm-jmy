@@ -67,6 +67,7 @@ export interface Lead {
   description: string;
   priority: number | null;
   potentialRevenue: number | null;
+  doctorName?: string; // Added field for Doctor mapping in CSKH view
 }
 
 export interface CskhItem {
@@ -79,6 +80,7 @@ export interface CskhItem {
   originalLeadId?: string;
   createdAt: string;
   updatedAt: string;
+  doctorName?: string; // Added field for Doctor
 }
 
 export interface Order {

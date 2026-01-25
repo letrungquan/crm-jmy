@@ -18,6 +18,8 @@ export const INITIAL_CSKH_STATUSES: StatusConfig[] = [
   { id: 'cskh_done', name: 'Hoàn tất', color: { bg: 'bg-green-100', text: 'text-green-600', border: 'border-green-200' } },
 ];
 
+export const DOCTORS = ['BS Vinh', 'BS Nga', 'BS Trầm', 'BS Vũ'];
+
 export const INITIAL_SALES: Sale[] = [
   { id: 'sale1', name: 'Ngọc Trinh', role: 'admin' },
   { id: 'sale2', name: 'Hà Anh', role: 'sale' },

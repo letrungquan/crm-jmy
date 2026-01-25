@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Lead, Order, CustomerData, Sale, CskhItem } from '../types';
+import DailyCskhReport from './DailyCskhReport';
 
 interface ReportsViewProps {
   leads: Lead[];
@@ -357,49 +358,53 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activities Feed */}
-        <section className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[600px]">
-          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
-            <h3 className="text-sm font-bold text-slate-800 flex items-center uppercase tracking-tight">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              Hoạt động hệ thống thời gian thực
-            </h3>
-            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Live Feed</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
-            {recentActivities.map((act, i) => {
-              const isOrder = act.type === 'order';
-              const actDate = new Date(act.date);
-              const isInPeriod = actDate >= dateFilter.start && actDate <= dateFilter.end;
+        {/* Left Column (2/3): Daily CSKH Report & Recent Activities Feed */}
+        <div className="lg:col-span-2 space-y-6">
+             <DailyCskhReport cskhItems={cskhItems} leads={leads} />
 
-              return (
-                <div key={`${act.id}-${i}`} className={`flex gap-3 group relative transition-opacity ${isInPeriod ? 'opacity-100' : 'opacity-50'}`}>
-                  <div className="flex flex-col items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center border shadow-sm ${isOrder ? 'bg-green-50 border-green-200 text-green-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}>
-                       {isOrder ? <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg> : <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>}
-                    </div>
-                    {i !== recentActivities.length - 1 && <div className="w-0.5 h-full bg-slate-100 my-1"></div>}
-                  </div>
-                  <div className={`flex-1 p-3 rounded-xl border transition-all ${isOrder ? 'bg-green-50/30 border-green-100' : 'bg-white border-slate-100 group-hover:border-blue-200 shadow-sm'}`}>
-                    <div className="flex justify-between items-start mb-1">
-                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{actDate.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})} • {actDate.toLocaleDateString('vi-VN')}</span>
-                       {isOrder && <span className="text-xs font-black text-green-700">+{formatCurrency((act as any).revenue)}</span>}
-                    </div>
-                    <p className="text-xs font-bold text-slate-800 leading-relaxed">
-                      <span className="text-blue-600 font-black">{act.user}</span>: {act.content.replace(/\[PHẢN HỒI\]|\[CHỐT ĐƠN\]/g, '').trim()}
-                    </p>
-                    <div className="flex justify-between items-center mt-2">
-                        <p className="text-[10px] text-slate-500 font-medium">Khách: <span className="text-slate-700 font-bold">{act.customer}</span></p>
-                        {!isInPeriod && <span className="text-[9px] text-slate-300 font-bold uppercase italic">Ngoài kỳ lọc</span>}
-                    </div>
-                  </div>
+             {/* Recent Activities Feed - Moved back here */}
+             <section className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center uppercase tracking-tight">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Hoạt động gần đây
+                  </h3>
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Live Feed</span>
                 </div>
-              );
-            })}
-          </div>
-        </section>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                  {recentActivities.map((act, i) => {
+                    const isOrder = act.type === 'order';
+                    const actDate = new Date(act.date);
+                    const isInPeriod = actDate >= dateFilter.start && actDate <= dateFilter.end;
 
-        {/* Sidebar Reports */}
+                    return (
+                      <div key={`${act.id}-${i}`} className={`flex gap-3 group relative transition-opacity ${isInPeriod ? 'opacity-100' : 'opacity-50'}`}>
+                        <div className="flex flex-col items-center">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center border shadow-sm ${isOrder ? 'bg-green-50 border-green-200 text-green-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}>
+                            {isOrder ? <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg> : <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>}
+                          </div>
+                          {i !== recentActivities.length - 1 && <div className="w-0.5 h-full bg-slate-100 my-1"></div>}
+                        </div>
+                        <div className={`flex-1 p-3 rounded-xl border transition-all ${isOrder ? 'bg-green-50/30 border-green-100' : 'bg-white border-slate-100 group-hover:border-blue-200 shadow-sm'}`}>
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{actDate.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})} • {actDate.toLocaleDateString('vi-VN')}</span>
+                            {isOrder && <span className="text-xs font-black text-green-700">+{formatCurrency((act as any).revenue)}</span>}
+                          </div>
+                          <p className="text-xs font-bold text-slate-800 leading-relaxed">
+                            <span className="text-blue-600 font-black">{act.user}</span>: {act.content.replace(/\[PHẢN HỒI\]|\[CHỐT ĐƠN\]/g, '').trim()}
+                          </p>
+                          <div className="flex justify-between items-center mt-2">
+                              <p className="text-[10px] text-slate-500 font-medium">Khách: <span className="text-slate-700 font-bold">{act.customer}</span></p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+             </section>
+        </div>
+
+        {/* Right Column (1/3): Sales Perf, Marketing Channels */}
         <div className="space-y-6">
           {/* Top Sales Performance */}
           <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
@@ -433,7 +438,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
             </div>
           </section>
 
-          {/* Marketing Channels - FIXED TO USE SOURCE INSTEAD OF STATUS */}
+          {/* Marketing Channels */}
           <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
             <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-tight flex items-center">
                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
@@ -442,7 +447,6 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
             <div className="space-y-4">
               {Object.entries(ceoStats.leadSourceCounts).length > 0 ? (
                   Object.entries(ceoStats.leadSourceCounts)
-                    // FIX: Explicitly cast to any or number to avoid arithmetic operation errors on line 395
                     .sort(([, a], [, b]) => (b as any) - (a as any))
                     .slice(0, 5)
                     .map(([source, count]) => {

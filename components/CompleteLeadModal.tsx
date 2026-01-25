@@ -1,17 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { Lead } from '../types';
+import { DOCTORS } from '../constants';
 
 interface CompleteLeadModalProps {
   lead: Lead;
   onClose: () => void;
-  onConfirm: (data: { actualRevenue: number; actualService: string; note: string }) => void;
+  onConfirm: (data: { actualRevenue: number; actualService: string; note: string; doctorName: string }) => void;
 }
 
 const CompleteLeadModal: React.FC<CompleteLeadModalProps> = ({ lead, onClose, onConfirm }) => {
   const [actualRevenue, setActualRevenue] = useState<string>('');
   const [actualService, setActualService] = useState<string>('');
   const [note, setNote] = useState('');
+  const [doctorName, setDoctorName] = useState('');
 
   useEffect(() => {
     // Fill initial data from the lead prediction
@@ -30,7 +32,8 @@ const CompleteLeadModal: React.FC<CompleteLeadModalProps> = ({ lead, onClose, on
     onConfirm({
         actualRevenue: parseInt(actualRevenue),
         actualService: actualService,
-        note: note
+        note: note,
+        doctorName: doctorName
     });
   };
 
@@ -87,6 +90,18 @@ const CompleteLeadModal: React.FC<CompleteLeadModalProps> = ({ lead, onClose, on
               {actualRevenue && (
                   <p className="text-xs text-slate-500 mt-1 text-right">{formatCurrency(actualRevenue)} VND</p>
               )}
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Bác sĩ thực hiện</label>
+                <select
+                    value={doctorName}
+                    onChange={(e) => setDoctorName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-green-500 focus:border-green-500 font-medium"
+                >
+                    <option value="">-- Chọn bác sĩ --</option>
+                    {DOCTORS.map(dr => <option key={dr} value={dr}>{dr}</option>)}
+                </select>
             </div>
 
             <div>

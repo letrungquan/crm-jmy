@@ -344,7 +344,8 @@ function App() {
                   assignedTo: c.assigned_to,
                   originalLeadId: c.original_lead_id,
                   createdAt: c.created_at,
-                  updatedAt: c.updated_at
+                  updatedAt: c.updated_at,
+                  doctorName: c.doctor_name // Map doctor_name
               };
           });
           setCskhItems(formattedCskh);
@@ -680,12 +681,12 @@ function App() {
     } catch(err) { alert(formatErrorMessage(err)); }
   };
 
-  const executeLeadCompletion = async (data: { actualRevenue: number; actualService: string; note: string }) => {
+  const executeLeadCompletion = async (data: { actualRevenue: number; actualService: string; note: string; doctorName: string }) => {
       if (!leadToComplete) return;
       const targetLead = leadToComplete;
       setLeadToComplete(null);
       
-      const { actualRevenue, actualService, note } = data;
+      const { actualRevenue, actualService, note, doctorName } = data;
       const updatedNoteContent = note ? `[CHỐT ĐƠN] ${note}` : undefined;
 
       if (useLocalOnly) {
@@ -722,7 +723,8 @@ function App() {
               assignedTo: targetLead.assignedTo,
               originalLeadId: targetLead.id,
               createdAt: now,
-              updatedAt: now
+              updatedAt: now,
+              doctorName: doctorName // Save doctor
           };
           const updatedCskh = [newCskhItem, ...cskhItems];
           setCskhItems(updatedCskh); setLocalCskh(updatedCskh);
@@ -755,7 +757,8 @@ function App() {
               service: actualService,
               status: 'cskh_new',
               assigned_to: targetLead.assignedTo,
-              original_lead_id: targetLead.id
+              original_lead_id: targetLead.id,
+              doctor_name: doctorName // Insert doctor_name
           }]);
           if (selectedLead?.id === targetLead.id) setSelectedLead(null);
       } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
@@ -865,8 +868,11 @@ function App() {
                       onSelectCskh={(item) => {
                           // Tái sử dụng logic mở LeadDetail từ CSKH Item (giống trong CskhView)
                           const lead = leads.find(l => l.id === item.originalLeadId);
-                          if (lead) setSelectedLead(lead);
-                          else {
+                          if (lead) {
+                              // Inject doctorName from CSKH item to the lead object for the modal
+                              const leadWithDoctor = { ...lead, doctorName: item.doctorName };
+                              setSelectedLead(leadWithDoctor);
+                          } else {
                               // Fallback nếu không tìm thấy lead gốc (ghost lead để xem chi tiết)
                               const ghostLead: Lead = {
                                   id: item.originalLeadId || `ghost_${item.id}`,
@@ -875,7 +881,8 @@ function App() {
                                   service: item.service, description: 'Dữ liệu CSKH (Không tìm thấy cơ hội gốc)',
                                   priority: null, potentialRevenue: 0, notes: [],
                                   createdAt: item.createdAt, updatedAt: item.updatedAt,
-                                  appointmentDate: null, projectedAppointmentDate: null
+                                  appointmentDate: null, projectedAppointmentDate: null,
+                                  doctorName: item.doctorName // Add doctor here too
                               };
                               setSelectedLead(ghostLead);
                           }
@@ -911,8 +918,10 @@ function App() {
                 onCustomizeStatuses={() => {}} 
                 onSelectCskh={(item) => {
                     const lead = leads.find(l => l.id === item.originalLeadId);
-                    if (lead) setSelectedLead(lead);
-                    else {
+                    if (lead) {
+                        const leadWithDoctor = { ...lead, doctorName: item.doctorName };
+                        setSelectedLead(leadWithDoctor);
+                    } else {
                         const ghostLead: Lead = {
                              id: item.originalLeadId || `ghost_${item.id}`,
                              name: item.customerName, phone: item.customerPhone, source: 'Unknown',
@@ -920,7 +929,8 @@ function App() {
                              service: item.service, description: 'Dữ liệu CSKH (Không tìm thấy cơ hội gốc)',
                              priority: null, potentialRevenue: 0, notes: [],
                              createdAt: item.createdAt, updatedAt: item.updatedAt,
-                             appointmentDate: null, projectedAppointmentDate: null
+                             appointmentDate: null, projectedAppointmentDate: null,
+                             doctorName: item.doctorName
                          };
                          setSelectedLead(ghostLead);
                     }
@@ -1002,19 +1012,33 @@ function App() {
                 if (updatedLead.status === 'completed' && selectedLead.status !== 'completed') { setLeadToComplete(updatedLead); return; }
                 if (useLocalOnly) {
                     const newLeads = leads.map(l => l.id === updatedLead.id ? updatedLead : l);
-                    setLeads(newLeads); setLocalLeads(newLeads); setSelectedLead(null);
+                    setLeads(newLeads); setLocalLeads(newLeads); 
+                    
+                    // Update CSKH item doctor if changed
+                    if (activeView === 'cskh' && updatedLead.doctorName !== selectedLead.doctorName) {
+                        const updatedCskh = cskhItems.map(item => item.originalLeadId === updatedLead.id ? {...item, doctorName: updatedLead.doctorName} : item);
+                        setCskhItems(updatedCskh); setLocalCskh(updatedCskh);
+                    }
+                    setSelectedLead(null);
                 } else {
                     await supabase.from('leads').update({
                          status: updatedLead.status, cskh_status: updatedLead.cskhStatus, assigned_to: updatedLead.assignedTo,
                          potential_revenue: updatedLead.potentialRevenue, service: updatedLead.service,
                          description: updatedLead.description, appointment_date: updatedLead.appointmentDate,
                          projected_appointment_date: updatedLead.projectedAppointmentDate, updated_at: new Date().toISOString(),
-                         priority: updatedLead.priority // Include priority in update
+                         priority: updatedLead.priority
                     }).eq('id', updatedLead.id);
+                    
                     if (updatedLead.notes.length > (selectedLead.notes || []).length) {
                         const newNote = updatedLead.notes[0];
                          await supabase.from('notes').insert([{ id: newNote.id, lead_id: updatedLead.id, content: newNote.content, created_by: currentUser }]);
                     }
+
+                    // Update Doctor Name in CSKH table if context is CSKH and doctorName changed
+                    if (activeView === 'cskh' && updatedLead.doctorName !== selectedLead.doctorName) {
+                        await supabase.from('cskh').update({ doctor_name: updatedLead.doctorName }).eq('original_lead_id', updatedLead.id);
+                    }
+
                     setSelectedLead(null);
                 }
             }}
