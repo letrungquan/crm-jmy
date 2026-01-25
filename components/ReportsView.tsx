@@ -139,11 +139,14 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
         let dateStr: string | null = null;
         let isProjected = false;
 
+        // MATCH LOGIC WITH CALENDAR VIEW
         if (['scheduled', 'completed'].includes(lead.status)) {
             dateStr = lead.appointmentDate;
-        } else {
+        } else if (lead.status === 'contacting') {
             dateStr = lead.projectedAppointmentDate;
             isProjected = true;
+        } else {
+            return null; // Exclude new, lost
         }
 
         if (!dateStr) return null;
@@ -164,9 +167,10 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
     };
 
     const potentialRevenue = leads.reduce((sum, l) => {
-        if (l.status === 'lost') return sum; // Bỏ qua lead thất bại
+        if (l.status === 'lost') return sum; 
         
         const revDate = getLeadRevenueDate(l);
+        // Kiểm tra xem ngày dự thu có nằm trong khoảng lọc không
         if (revDate && revDate >= dateFilter.start && revDate <= dateFilter.end) {
             return sum + (l.potentialRevenue || 0);
         }

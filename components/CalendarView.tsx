@@ -24,17 +24,21 @@ const getWeekDays = (d: Date) => {
 
 // Helper to safely parse lead date for calendar display
 const getLeadDate = (lead: Lead): Date | null => {
-    // FIX: Strictly select date source based on status to avoid stale data issues.
-    // If status is 'scheduled' or 'completed', we look for the real appointment date.
-    // If status is 'contacting' (or others), we look for the projected date.
     let dateStr: string | null = null;
     let isProjected = false;
 
+    // 1. Trạng thái đã có lịch hẹn cụ thể
     if (['scheduled', 'completed'].includes(lead.status)) {
         dateStr = lead.appointmentDate;
-    } else {
+    } 
+    // 2. Trạng thái đang liên hệ (Dự thu)
+    else if (lead.status === 'contacting') {
         dateStr = lead.projectedAppointmentDate;
         isProjected = true;
+    } 
+    // 3. Trạng thái Mới (new) hoặc Thất bại (lost) -> KHÔNG hiện trên lịch dự thu
+    else {
+        return null;
     }
 
     if (!dateStr) return null;
