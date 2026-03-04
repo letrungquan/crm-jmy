@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Lead, Order, CustomerData, Sale, CskhItem } from '../types';
+import { Lead, Order, CustomerData, Sale, CskhItem, ReExamination, Activity } from '../types';
 import DailyCskhReport from './DailyCskhReport';
 
 interface ReportsViewProps {
@@ -10,13 +10,33 @@ interface ReportsViewProps {
   customers: Record<string, CustomerData>;
   sources: string[];
   sales?: Sale[];
+  reExaminations?: ReExamination[];
+  activities?: Activity[];
 }
 
 type TimeRange = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'custom';
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
 
-const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, customers, sources, sales = [] }) => {
+const getRelativeTime = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Vừa xong';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
+  
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Hôm qua ${date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  return `${date.toLocaleDateString('vi-VN')} ${date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+};
+
+const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, customers, sources, sales = [], reExaminations = [], activities = [] }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('this_month');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
 
@@ -167,7 +187,18 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
         return new Date(dateStr);
     };
 
-    const potentialRevenue = leads.reduce((sum, l) => {
+    const getReExamDate = (reExam: ReExamination): Date | null => {
+        if (!reExam.date) return null;
+        try {
+            const parts = reExam.date.split('T');
+            const [y, m, d] = parts[0].split('-').map(Number);
+            return new Date(y, m - 1, d, 12, 0, 0);
+        } catch (e) {
+            return new Date(reExam.date);
+        }
+    };
+
+    const leadPotentialRevenue = leads.reduce((sum, l) => {
         if (l.status === 'lost') return sum; 
         
         const revDate = getLeadRevenueDate(l);
@@ -177,6 +208,18 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
         }
         return sum;
     }, 0);
+
+    const reExamPotentialRevenue = reExaminations.reduce((sum, r) => {
+        if (!['pending', 'called'].includes(r.status)) return sum;
+
+        const revDate = getReExamDate(r);
+        if (revDate && revDate >= dateFilter.start && revDate <= dateFilter.end) {
+            return sum + (r.potentialRevenue || 0);
+        }
+        return sum;
+    }, 0);
+
+    const potentialRevenue = leadPotentialRevenue + reExamPotentialRevenue;
 
     // 3.4. CSKH Stats
     const totalCskhTickets = filteredData.cskh.length;
@@ -207,7 +250,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       cskhCompletionRate,
       cskhStatusCounts
     };
-  }, [filteredData, leads, dateFilter]); // Thêm dateFilter vào dependencies để tính toán lại khi đổi ngày
+  }, [filteredData, leads, reExaminations, dateFilter]); // Thêm dateFilter vào dependencies để tính toán lại khi đổi ngày
 
   // 4. Hiệu suất Sale
   const salesPerformance = useMemo(() => {
@@ -226,31 +269,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
       .sort((a, b) => b.revenue - a.revenue);
   }, [filteredData.orders, sales]);
 
-  // 5. Hoạt động gần đây
-  const recentActivities = useMemo(() => {
-    const notes = leads.flatMap(l => (l.notes || []).map(n => ({
-      id: n.id,
-      type: 'note',
-      content: n.content,
-      user: sales.find(s => s.id === n.createdBy)?.name || 'Hệ thống',
-      customer: l.name,
-      date: n.createdAt
-    })));
 
-    const newOrders = orders.map(o => ({
-      id: o.id,
-      type: 'order',
-      content: `Đã tạo đơn hàng mới: ${o.service}`,
-      user: sales.find(s => s.id === o.assignedTo)?.name || 'Hệ thống',
-      customer: customers[o.customerPhone]?.name || o.customerPhone,
-      date: o.createdAt,
-      revenue: o.revenue
-    }));
-
-    return [...notes, ...newOrders]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 20);
-  }, [leads, orders, sales, customers]);
 
   return (
     <div className="p-4 sm:p-6 bg-slate-50 min-h-full space-y-6">
@@ -372,34 +391,34 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
                   <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Live Feed</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
-                  {recentActivities.map((act, i) => {
-                    const isOrder = act.type === 'order';
-                    const actDate = new Date(act.date);
+                  {activities.length > 0 ? activities.map((act, i) => {
+                    const actDate = new Date(act.time);
                     const isInPeriod = actDate >= dateFilter.start && actDate <= dateFilter.end;
 
                     return (
                       <div key={`${act.id}-${i}`} className={`flex gap-3 group relative transition-opacity ${isInPeriod ? 'opacity-100' : 'opacity-50'}`}>
                         <div className="flex flex-col items-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center border shadow-sm ${isOrder ? 'bg-green-50 border-green-200 text-green-600' : 'bg-blue-50 border-blue-200 text-blue-600'}`}>
-                            {isOrder ? <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg> : <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center border shadow-sm bg-white text-slate-600`}>
+                            <span className="text-sm">{act.icon}</span>
                           </div>
-                          {i !== recentActivities.length - 1 && <div className="w-0.5 h-full bg-slate-100 my-1"></div>}
+                          {i !== activities.length - 1 && <div className="w-0.5 h-full bg-slate-100 my-1"></div>}
                         </div>
-                        <div className={`flex-1 p-3 rounded-xl border transition-all ${isOrder ? 'bg-green-50/30 border-green-100' : 'bg-white border-slate-100 group-hover:border-blue-200 shadow-sm'}`}>
+                        <div className={`flex-1 p-3 rounded-xl border transition-all bg-white border-slate-100 group-hover:border-blue-200 shadow-sm`}>
                           <div className="flex justify-between items-start mb-1">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{actDate.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})} • {actDate.toLocaleDateString('vi-VN')}</span>
-                            {isOrder && <span className="text-xs font-black text-green-700">+{formatCurrency((act as any).revenue)}</span>}
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                {getRelativeTime(act.time)}
+                            </span>
                           </div>
                           <p className="text-xs font-bold text-slate-800 leading-relaxed">
-                            <span className="text-blue-600 font-black">{act.user}</span>: {act.content.replace(/\[PHẢN HỒI\]|\[CHỐT ĐƠN\]/g, '').trim()}
+                            {act.user && <span className="text-blue-600 font-black">{act.user}: </span>}
+                            {act.message}
                           </p>
-                          <div className="flex justify-between items-center mt-2">
-                              <p className="text-[10px] text-slate-500 font-medium">Khách: <span className="text-slate-700 font-bold">{act.customer}</span></p>
-                          </div>
                         </div>
                       </div>
                     );
-                  })}
+                  }) : (
+                    <div className="p-8 text-center text-slate-400 text-sm italic">Không có hoạt động nào gần đây.</div>
+                  )}
                 </div>
              </section>
         </div>

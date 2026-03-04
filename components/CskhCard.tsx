@@ -47,7 +47,16 @@ const CskhCard: React.FC<CskhCardProps> = ({ item, statusConfig, onDelete, onCli
     >
       {onDelete && (
           <button 
-              onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+              type="button"
+              onMouseDown={(e) => { e.stopPropagation(); }}
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onClick={(e) => { 
+                  console.log('Delete button clicked in CskhCard for:', item.id);
+                  e.preventDefault();
+                  e.stopPropagation(); 
+                  onDelete(item.id); 
+              }}
               className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity border border-slate-100 z-10"
               title="Xóa phiếu CSKH"
           >

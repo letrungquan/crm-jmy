@@ -16,13 +16,14 @@ interface CustomerDetailViewProps {
   onAddNote: (leadId: string, noteContent: string) => void;
   currentUser: Sale['id'];
   isAdmin: boolean;
+  onAddReExam?: () => void;
 }
 
 const InfoField: React.FC<{ label: string; value?: string | number | null }> = ({ label, value }) => (
     <div className="flex justify-between text-sm py-1.5 border-b border-slate-50 last:border-0">
         <span className="text-slate-500">{label}</span>
         <span className="font-medium text-slate-700 text-right truncate max-w-[60%]">
-            {(value !== null && value !== undefined && value !== '') ? value : '---'}
+            {(value !== null && value !== undefined && value !== '') ? value : 'Chưa cập nhật'}
         </span>
     </div>
 );
@@ -48,7 +49,9 @@ const KpiCard: React.FC<{ label: string; value: React.ReactNode; subValue?: stri
     </div>
 );
 
-const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales, statuses, cskhItems, relationships = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy'], onClose, onSelectLead, onUpdateCustomer, onEdit, onDelete, onAddNote, currentUser, isAdmin }) => {
+const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy'];
+
+const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales, statuses, cskhItems, relationships = DEFAULT_RELATIONSHIPS, onClose, onSelectLead, onUpdateCustomer, onEdit, onDelete, onAddNote, currentUser, isAdmin, onAddReExam }) => {
     const [activeTab, setActiveTab] = useState('trao_doi');
     const [newNote, setNewNote] = useState('');
     const [selectedLeadForNote, setSelectedLeadForNote] = useState<string>('');
@@ -66,7 +69,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
 
     useEffect(() => {
         setRelationship(customer.relationshipStatus || relationships[0]);
-    }, [customer.relationshipStatus, relationships]);
+    }, [customer.relationshipStatus]);
 
     const handleRelationshipChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newStatus = e.target.value;
@@ -192,7 +195,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
     };
 
     const mapGender = (g?: string) => {
-        if (!g) return '---';
+        if (!g) return 'Chưa cập nhật';
         const lower = g.toLowerCase();
         if (lower === 'female' || lower === 'nu' || lower === 'nữ') return 'Nữ';
         if (lower === 'male' || lower === 'nam') return 'Nam';
@@ -201,7 +204,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
     }
 
     const formatDateOfBirth = (dob?: string) => {
-        if (!dob) return '---';
+        if (!dob) return 'Chưa cập nhật';
         try {
             const date = new Date(dob);
             if (isNaN(date.getTime())) return dob;
@@ -212,7 +215,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
     }
 
     const calculateAge = (dob?: string) => {
-        if (!dob) return '---';
+        if (!dob) return 'Chưa cập nhật';
         try {
             const birthDate = new Date(dob);
             const today = new Date();
@@ -221,8 +224,8 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
             if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
                 age--;
             }
-            return isNaN(age) ? '---' : age;
-        } catch { return '---'; }
+            return isNaN(age) ? 'Chưa cập nhật' : age;
+        } catch { return 'Chưa cập nhật'; }
     }
 
     return (
@@ -256,9 +259,17 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    <div className="flex items-center space-x-2">
+                        {onAddReExam && (
+                            <button onClick={onAddReExam} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 text-sm font-bold flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                Hẹn tái khám
+                            </button>
+                        )}
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
                 </div>
                 
                 <div className="bg-white border border-slate-200 rounded-lg p-4 grid grid-cols-2 md:grid-cols-5 gap-4 divide-x divide-slate-100 shadow-sm">
@@ -327,7 +338,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                             </div>
                              <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between px-4">
                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nghề nghiệp</span>
-                                 <span className="text-sm font-bold text-blue-600 truncate max-w-[120px]">{customer.occupation || '---'}</span>
+                                 <span className="text-sm font-bold text-blue-600 truncate max-w-[120px]">{customer.occupation || 'Chưa cập nhật'}</span>
                             </div>
                         </div>
 

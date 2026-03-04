@@ -1,139 +1,106 @@
-
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient';
-import useLocalStorage from './hooks/useLocalStorage';
 import { 
-  Lead, Sale, Customer, Order, Note, CskhItem, CustomerData, 
-  StatusConfig, AppView, RoleDefinition, Permission 
+  Lead, Sale, Order, CskhItem, ReExamination, Customer, CustomerData,
+  StatusConfig, RoleDefinition, AppView, Permission, Note, Activity
 } from './types';
-import { 
-  INITIAL_STATUSES, INITIAL_CSKH_STATUSES, INITIAL_SALES, INITIAL_LEADS 
-} from './constants';
+import useLocalStorage from './hooks/useLocalStorage';
 
+// Components
 import Sidebar from './components/Sidebar';
 import MainHeader from './components/MainHeader';
-import ReportsView from './components/ReportsView';
-import SaleDashboard from './components/SaleDashboard';
-import KanbanBoard from './components/KanbanBoard';
-import CskhView from './components/CskhView';
-import CustomerList from './components/CustomerList';
-import CustomerDetailView from './components/CustomerDetailView';
-import OrderList from './components/OrderList';
-import CalendarView from './components/CalendarView';
-import SettingsView from './components/SettingsView';
 import LoginView from './components/LoginView';
-import ConfirmationModal from './components/ConfirmationModal';
-import AddLeadModal from './components/AddLeadModal';
+import KanbanBoard from './components/KanbanBoard';
+import LeadList from './components/LeadList';
+import CalendarView from './components/CalendarView';
+import CskhView from './components/CskhView';
+import ReExaminationView from './components/ReExaminationView';
+import CustomerList from './components/CustomerList';
+import OrderList from './components/OrderList';
+import SaleDashboard from './components/SaleDashboard';
+import ReportsView from './components/ReportsView';
+import SettingsView from './components/SettingsView';
+
+// Modals
 import LeadDetailModal from './components/LeadDetailModal';
-import CustomerFormModal from './components/CustomerFormModal';
+import AddLeadModal from './components/AddLeadModal';
 import AddOrderModal from './components/AddOrderModal';
 import ImportOrderModal from './components/ImportOrderModal';
+import CustomerFormModal from './components/CustomerFormModal';
+import CustomerDetailView from './components/CustomerDetailView';
+import CskhDetailModal from './components/CskhDetailModal';
 import CompleteLeadModal from './components/CompleteLeadModal';
+import StatusManagementModal from './components/StatusManagementModal';
+import ConfirmationModal from './components/ConfirmationModal';
+import AddReExaminationModal from './components/AddReExaminationModal';
+import ReExaminationDetailModal from './components/ReExaminationDetailModal';
 
-// Helper to map App Customer Data to Supabase DB columns (snake_case)
-const mapAppCustomerDataToDbCustomer = (data: Partial<CustomerData>) => {
-  const dbData: any = {};
-  if (data.phone !== undefined) dbData.phone = data.phone;
-  if (data.name !== undefined) dbData.name = data.name;
-  if (data.email !== undefined) dbData.email = data.email;
-  if (data.address !== undefined) dbData.address = data.address;
-  if (data.location !== undefined) dbData.location = data.location;
-  if (data.province !== undefined) dbData.province = data.province;
-  if (data.district !== undefined) dbData.district = data.district;
-  if (data.ward !== undefined) dbData.ward = data.ward;
-  if (data.gender !== undefined) dbData.gender = data.gender;
-  if (data.dateOfBirth !== undefined) dbData.date_of_birth = data.dateOfBirth;
-  if (data.occupation !== undefined) dbData.occupation = data.occupation;
-  if (data.customerGroup !== undefined) dbData.customer_group = data.customerGroup;
-  if (data.relationshipStatus !== undefined) dbData.relationship_status = data.relationshipStatus;
-  if (data.source !== undefined) dbData.source = data.source;
-  if (data.generalNotes !== undefined) dbData.general_notes = data.generalNotes;
-  if (data.tags !== undefined) dbData.tags = data.tags;
-  if (data.profileCompleteness !== undefined) dbData.profile_completeness = data.profileCompleteness;
-  if (data.assignedTo !== undefined) dbData.assigned_to = data.assignedTo;
-  
-  // Tracking fields
-  if (data.ip !== undefined) dbData.ip = data.ip;
-  if (data.userAgent !== undefined) dbData.user_agent = data.userAgent;
-  if (data.fbp !== undefined) dbData.fbp = data.fbp;
-  if (data.fbc !== undefined) dbData.fbc = data.fbc;
-  if (data.ttclid !== undefined) dbData.ttclid = data.ttclid;
-  if (data.ttp !== undefined) dbData.ttp = data.ttp;
-  if (data.sourceUrl !== undefined) dbData.source_url = data.sourceUrl;
-  if (data.utmSource !== undefined) dbData.utm_source = data.utmSource;
-  if (data.utmMedium !== undefined) dbData.utm_medium = data.utmMedium;
-  if (data.eventId !== undefined) dbData.event_id = data.eventId;
-  if (data.externalId !== undefined) dbData.external_id = data.externalId;
-  
-  return dbData;
-};
-
-const formatErrorMessage = (error: any) => {
-    if (typeof error === 'string') return error;
-    return error?.message || 'Có lỗi xảy ra';
-};
-
-const DEFAULT_ROLES: RoleDefinition[] = [
-    { 
-        id: 'admin', 
-        name: 'Quản trị viên', 
-        isSystem: true, 
-        permissions: ['lead.view', 'lead.create', 'lead.edit', 'lead.delete', 'lead.import', 'customer.view', 'customer.create', 'customer.edit', 'customer.delete', 'order.view', 'order.create', 'order.edit', 'order.delete', 'order.import', 'settings.access', 'user.manage'],
-        description: 'Toàn quyền hệ thống'
-    },
-    { 
-        id: 'sale', 
-        name: 'Nhân viên Sale', 
-        isSystem: true, 
-        permissions: ['lead.view', 'lead.create', 'lead.edit', 'customer.view', 'customer.create', 'customer.edit', 'order.view', 'order.create'],
-        description: 'Quyền cơ bản để bán hàng'
-    }
-];
+// Constants
+import { 
+  INITIAL_STATUSES, INITIAL_CSKH_STATUSES, INITIAL_SALES 
+} from './constants';
 
 function App() {
-  // --- STATE ---
-  const [activeView, setActiveView] = useState<AppView>('dashboard');
+  // --- Auth State ---
   const [session, setSession] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<string>('');
   const [userProfile, setUserProfile] = useState<Sale | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [useLocalOnly, setUseLocalOnly] = useState(false);
 
-  // Local Storage for Offline/Local Mode
-  const [localLeads, setLocalLeads] = useLocalStorage<Lead[]>('leads', INITIAL_LEADS);
-  const [localCskh, setLocalCskh] = useLocalStorage<CskhItem[]>('cskh', []);
-  const [localCustomers, setLocalCustomers] = useLocalStorage<Record<string, CustomerData>>('customers', {});
-  const [localOrders, setLocalOrders] = useLocalStorage<Order[]>('orders', []);
-  
-  // Main Data State
+  // --- UI State ---
+  const [activeView, setActiveView] = useState<AppView>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+
+  // --- Data State ---
   const [leads, setLeads] = useState<Lead[]>([]);
   const [cskhItems, setCskhItems] = useState<CskhItem[]>([]);
-  const [customersData, setCustomersData] = useState<Record<string, CustomerData>>({});
   const [orders, setOrders] = useState<Order[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [reExaminations, setReExaminations] = useState<ReExamination[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [sales, setSales] = useState<Sale[]>(INITIAL_SALES);
   
-  // Config State (Fetched from DB)
-  const [statuses] = useState<StatusConfig[]>(INITIAL_STATUSES);
-  const [cskhStatuses] = useState<StatusConfig[]>(INITIAL_CSKH_STATUSES);
-  const [sales, setSales] = useState<Sale[]>(INITIAL_SALES); // Will fetch from DB profiles
-  
-  const [sources, setSources] = useState<string[]>(['Facebook', 'Google', 'TikTok', 'Zalo', 'Khách giới thiệu', 'Vãng lai']);
-  const [relationships, setRelationships] = useState<string[]>(['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy']);
-  const [customerGroups, setCustomerGroups] = useState<string[]>(['VIP', 'Thân thiết', 'Tiềm năng', 'Vãng lai']);
-  const [roles, setRoles] = useState<RoleDefinition[]>(DEFAULT_ROLES);
+  // --- Config State ---
+  const [roles, setRoles] = useState<RoleDefinition[]>([
+    { id: 'admin', name: 'Quản trị viên', permissions: [], isSystem: true },
+    { id: 'sale', name: 'Nhân viên Sale', permissions: [], isSystem: false },
+  ]);
+  const [statuses, setStatuses] = useLocalStorage<StatusConfig[]>('statuses', INITIAL_STATUSES);
+  const [cskhStatuses, setCskhStatuses] = useLocalStorage<StatusConfig[]>('cskh_statuses', INITIAL_CSKH_STATUSES);
+  const [sources, setSources] = useLocalStorage<string[]>('sources', ['Facebook', 'Zalo', 'Website', 'Direct', 'Referral']);
+  const [relationships, setRelationships] = useLocalStorage<string[]>('relationships', ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy']);
+  const [customerGroups, setCustomerGroups] = useLocalStorage<string[]>('customer_groups', ['VIP', 'Thân thiết', 'Tiềm năng', 'Vãng lai']);
 
-  // UI State
+  // --- Local Storage (Offline Mode) ---
+  const [useLocalOnly, setUseLocalOnly] = useState(false);
+  const [localLeads, setLocalLeads] = useLocalStorage<Lead[]>('local_leads', []);
+  const [localCskh, setLocalCskh] = useLocalStorage<CskhItem[]>('local_cskh', []);
+  const [localOrders, setLocalOrders] = useLocalStorage<Order[]>('local_orders', []);
+  const [localReExams, setLocalReExams] = useLocalStorage<ReExamination[]>('local_re_exams', []);
+
+  // --- Modals State ---
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [selectedCustomerPhone, setSelectedCustomerPhone] = useState<string | null>(null);
-  const [customerViewMode, setCustomerViewMode] = useState<'list' | 'detail'>('list');
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
+  const [leadToComplete, setLeadToComplete] = useState<Lead | null>(null);
   
-  // Modals
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [isCustomerFormOpen, setIsCustomerFormOpen] = useState(false);
+  const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
+
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
   const [isImportOrderModalOpen, setIsImportOrderModalOpen] = useState(false);
-  const [leadToComplete, setLeadToComplete] = useState<Lead | null>(null); // New state for completion modal
+
+  const [selectedCskh, setSelectedCskh] = useState<CskhItem | null>(null);
+  
+  const [isAddReExamModalOpen, setIsAddReExamModalOpen] = useState(false);
+  const [reExamInitialCustomer, setReExamInitialCustomer] = useState<Customer | undefined>(undefined);
+  const [selectedReExam, setSelectedReExam] = useState<ReExamination | null>(null);
+  const [deleteCskhTarget, setDeleteCskhTarget] = useState<string | null>(null);
+  const [deleteReExamTarget, setDeleteReExamTarget] = useState<string | null>(null);
+
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [statusModalType, setStatusModalType] = useState<'sales' | 'cskh'>('sales');
 
   const [confirmModal, setConfirmModal] = useState<{
       isOpen: boolean;
@@ -141,500 +108,499 @@ function App() {
       message: string;
       isDangerous?: boolean;
       onConfirm: () => void;
-  }>({
-      isOpen: false,
-      title: '',
-      message: '',
-      isDangerous: false,
-      onConfirm: () => {},
-  });
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
-  // Derived State
-  const currentUser = userProfile?.id || 'offline_admin';
-  const isAdmin = userProfile?.role === 'admin' || useLocalOnly;
+  // --- Filter State ---
+  const [selectedSource, setSelectedSource] = useState<string>('all');
+  const [selectedSaleFilter, setSelectedSaleFilter] = useState<string>('all');
 
-  // --- PERMISSION CHECK ---
-  const currentRoleDefinition = useMemo(() => {
-    return roles.find(r => r.id === userProfile?.role);
-  }, [roles, userProfile]);
 
-  const hasPermission = (permission: Permission) => {
-      if (useLocalOnly) return true; // Offline mode is basically admin
-      if (userProfile?.role === 'admin') return true; // Admin always has all permissions
-      return currentRoleDefinition?.permissions.includes(permission) || false;
+  const fetchActivities = async () => {
+      if (useLocalOnly) return;
+      
+      try {
+          const [leadsRes, cskhRes, ordersRes, reExamsRes, customersRes, notesRes] = await Promise.all([
+              supabase.from('leads').select('id, name, status, created_at, updated_at, assigned_to').order('created_at', { ascending: false }).limit(15),
+              supabase.from('cskh').select('id, customer_phone, status, created_at, updated_at, assigned_to').order('created_at', { ascending: false }).limit(15),
+              supabase.from('orders').select('id, customer_name, revenue, status, created_at, assigned_to').order('created_at', { ascending: false }).limit(15),
+              supabase.from('re_examinations').select('id, customer_name, status, created_at, assigned_to').order('created_at', { ascending: false }).limit(15),
+              supabase.from('customers').select('phone, name, created_at, creator').order('created_at', { ascending: false }).limit(15),
+              supabase.from('notes').select('id, content, created_at, created_by, lead_id').order('created_at', { ascending: false }).limit(20)
+          ]);
+
+          const allActivities: Activity[] = [
+              ...(leadsRes.data || []).map(l => ({
+                  id: `lead-${l.id}`,
+                  type: 'lead' as const,
+                  icon: '🎯',
+                  message: `Lead mới: ${l.name}`,
+                  time: l.created_at,
+                  user: sales.find(s => s.id === l.assigned_to)?.name
+              })),
+              ...(cskhRes.data || []).map(c => ({
+                  id: `cskh-${c.id}`,
+                  type: 'cskh' as const,
+                  icon: '💬',
+                  message: `CSKH: ${leads.find(l => l.phone === c.customer_phone)?.name || c.customer_phone} - ${c.status}`,
+                  time: c.created_at,
+                  user: sales.find(s => s.id === c.assigned_to)?.name
+              })),
+              ...(ordersRes.data || []).map(o => ({
+                  id: `order-${o.id}`,
+                  type: 'order' as const,
+                  icon: '📦',
+                  message: `Đơn hàng: ${o.customer_name} - ${new Intl.NumberFormat('vi-VN').format(o.revenue)}đ`,
+                  time: o.created_at,
+                  user: sales.find(s => s.id === o.assigned_to)?.name
+              })),
+              ...(reExamsRes.data || []).map(a => ({
+                  id: `re-exam-${a.id}`,
+                  type: 're_exam' as const,
+                  icon: '📅',
+                  message: `Lịch tái khám: ${a.customer_name}`,
+                  time: a.created_at,
+                  user: sales.find(s => s.id === a.assigned_to)?.name
+              })),
+              ...(customersRes.data || []).map(cust => ({
+                  id: `cust-${cust.phone}`,
+                  type: 'customer' as const,
+                  icon: '👤',
+                  message: `Khách hàng mới: ${cust.name}`,
+                  time: cust.created_at,
+                  user: sales.find(s => s.id === cust.creator)?.name
+              })),
+              ...(notesRes.data || []).map(n => ({
+                  id: `note-${n.id}`,
+                  type: 'lead' as const,
+                  icon: '📝',
+                  message: `Ghi chú: ${n.content.substring(0, 50)}${n.content.length > 50 ? '...' : ''}`,
+                  time: n.created_at,
+                  user: sales.find(s => s.id === n.created_by)?.name
+              }))
+          ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 30);
+
+          setActivities(allActivities);
+      } catch (err) {
+          console.error("Lỗi fetch activities:", err);
+      }
   };
 
-  // Merge Customers Data with Leads & Orders to create full Customer objects
-  const customers: Customer[] = useMemo(() => {
-    // Get unique phones from everywhere
-    const allPhones = new Set([
-        ...Object.keys(customersData),
-        ...leads.map(l => l.phone),
-        ...orders.map(o => o.customerPhone),
-        ...cskhItems.map(c => c.customerPhone)
-    ]);
+  const handleNewActivity = () => {
+      fetchActivities();
+  };
 
-    return Array.from(allPhones).map(phone => {
-        const data: Partial<CustomerData> = customersData[phone] || {};
-        const customerLeads = leads.filter(l => l.phone === phone);
-        const customerOrders = orders.filter(o => o.customerPhone === phone);
-        // Default name if missing
-        const name = data.name || customerLeads[0]?.name || customerOrders[0]?.customerName || cskhItems.find(c => c.customerPhone === phone)?.customerName || phone;
+  useEffect(() => {
+      if (useLocalOnly || !session) return;
 
-        return {
-            ...data,
-            phone,
-            name,
-            leads: customerLeads,
-            orders: customerOrders,
-            generalNotes: data.generalNotes || '',
-            tags: data.tags || []
-        } as Customer;
-    });
-  }, [customersData, leads, orders, cskhItems]);
+      const channel = supabase.channel('dashboard-activities')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, handleNewActivity)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'cskh' }, handleNewActivity)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, handleNewActivity)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 're_examinations' }, handleNewActivity)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, handleNewActivity)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, handleNewActivity)
+          .subscribe();
+      
+      return () => {
+          supabase.removeChannel(channel);
+      };
+  }, [useLocalOnly, session]);
 
-  // --- EFFECT: AUTH ---
+  // --- Helper Functions ---
+  const formatErrorMessage = (err: any) => {
+    return err?.message || JSON.stringify(err);
+  };
+
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const hasPermission = (permission: Permission): boolean => {
+    if (!userProfile) return false;
+    if (userProfile.role === 'admin') return true;
+    
+    const role = roles.find(r => r.id === userProfile.role);
+    if (!role) return false;
+    
+    // Admin role override in permissions check
+    if (role.id === 'admin') return true;
+
+    return role.permissions.includes(permission);
+  };
+
+  // --- Data Fetching ---
+  const fetchData = useCallback(async (forceRefresh = false) => {
+    // Nếu đang ở chế độ Local hoặc mất kết nối, dùng dữ liệu local ngay lập tức
+    if (useLocalOnly) {
+        setLeads(localLeads);
+        setCskhItems(localCskh);
+        setOrders(localOrders);
+        setReExaminations(localReExams);
+        // Build customer map from local data
+        const customerMap = new Map<string, Customer>();
+        localLeads.forEach(l => {
+             if(!customerMap.has(l.phone)) {
+                 customerMap.set(l.phone, {
+                     name: l.name, phone: l.phone, leads: [], orders: [], generalNotes: '', tags: [], source: l.source
+                 });
+             }
+             customerMap.get(l.phone)?.leads.push(l);
+        });
+        localOrders.forEach(o => {
+             if(!customerMap.has(o.customerPhone)) {
+                 customerMap.set(o.customerPhone, {
+                     name: o.customerName || 'Khách hàng', phone: o.customerPhone, leads: [], orders: [], generalNotes: '', tags: []
+                 });
+             }
+             customerMap.get(o.customerPhone)?.orders.push(o);
+        });
+        setCustomers(Array.from(customerMap.values()));
+        setIsRefreshing(false);
+        return;
+    }
+
+    if (!session && !forceRefresh) return;
+    setIsRefreshing(true);
+
+    try {
+        // 1. Fetch Sales (Profiles)
+        // Dùng try-catch riêng cho từng request để tránh crash toàn bộ
+        let profiles = [];
+        try {
+            const { data, error } = await supabase.from('profiles').select('*');
+            if (!error && data) profiles = data;
+        } catch (e) { console.warn("Lỗi fetch profiles", e); }
+        
+        if (profiles.length > 0) setSales(profiles);
+
+        // 2. Fetch Leads
+        const { data: leadsData, error: leadsError } = await supabase.from('leads').select(`
+            *,
+            notes (*)
+        `).order('created_at', { ascending: false });
+        
+        if (leadsError) throw leadsError;
+        
+        const formattedLeads: Lead[] = (leadsData || []).map(l => ({
+            id: l.id,
+            name: l.name,
+            phone: l.phone,
+            source: l.source,
+            assignedTo: l.assigned_to,
+            status: l.status,
+            notes: (l.notes || []).map((n: any) => ({
+                id: n.id,
+                content: n.content,
+                createdAt: n.created_at,
+                createdBy: n.created_by
+            })),
+            createdAt: l.created_at,
+            updatedAt: l.updated_at,
+            appointmentDate: l.appointment_date,
+            projectedAppointmentDate: l.projected_appointment_date,
+            service: l.service,
+            description: l.description,
+            priority: l.priority,
+            potentialRevenue: l.potential_revenue,
+            cskhStatus: l.cskh_status,
+            doctorName: l.doctor_name,
+            reExaminationDate: l.re_examination_date
+        }));
+        setLeads(formattedLeads);
+
+        // 3. Fetch CSKH
+        const { data: cskhData, error: cskhError } = await supabase.from('cskh').select('*').order('created_at', { ascending: false });
+        if (cskhError) throw cskhError;
+        
+        const formattedCskh: CskhItem[] = (cskhData || []).map(c => ({
+            id: c.id,
+            customerPhone: c.customer_phone,
+            customerName: formattedLeads.find(l => l.phone === c.customer_phone)?.name || 'Khách hàng',
+            service: c.service,
+            status: c.status,
+            assignedTo: c.assigned_to,
+            originalLeadId: c.original_lead_id,
+            createdAt: c.created_at,
+            updatedAt: c.updated_at,
+            doctorName: c.doctor_name,
+            reExaminationDate: c.re_examination_date
+        }));
+        setCskhItems(formattedCskh);
+
+        // 4. Fetch Orders
+        const { data: ordersData, error: ordersError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+        if (ordersError) throw ordersError;
+
+        const formattedOrders: Order[] = (ordersData || []).map(o => ({
+            id: o.id,
+            customerPhone: o.customer_phone,
+            customerName: o.customer_name,
+            service: o.service,
+            revenue: o.revenue,
+            createdAt: o.created_at,
+            status: o.status,
+            assignedTo: o.assigned_to,
+            externalId: o.external_id,
+            source: o.source
+        }));
+        setOrders(formattedOrders);
+        
+        // 5. Fetch Re-examinations
+        const { data: reExamData } = await supabase.from('re_examinations').select('*');
+        const formattedReExams: ReExamination[] = (reExamData || []).map(r => ({
+           id: r.id,
+           customerPhone: r.customer_phone,
+           customerName: r.customer_name,
+           date: r.date,
+           appointmentTime: r.appointment_time,
+           service: r.service,
+           doctorName: r.doctor_name,
+           assignedTo: r.assigned_to,
+           note: r.note,
+           status: r.status,
+           createdAt: r.created_at,
+           potentialRevenue: r.potential_revenue
+        }));
+        setReExaminations(formattedReExams);
+
+        // 6. Fetch Activities
+        await fetchActivities();
+
+        // 7. Customers Logic
+        const customerMap = new Map<string, Customer>();
+        formattedLeads.forEach(l => {
+            const existing = customerMap.get(l.phone);
+            if (existing) {
+                existing.leads.push(l);
+            } else {
+                customerMap.set(l.phone, {
+                    name: l.name,
+                    phone: l.phone,
+                    leads: [l],
+                    orders: [],
+                    generalNotes: '',
+                    tags: [],
+                    source: l.source,
+                    assignedTo: l.assignedTo || undefined
+                });
+            }
+        });
+        formattedOrders.forEach(o => {
+            const existing = customerMap.get(o.customerPhone);
+             if (existing) {
+                existing.orders.push(o);
+            } else {
+                 customerMap.set(o.customerPhone, {
+                    name: o.customerName || 'Khách hàng',
+                    phone: o.customerPhone,
+                    leads: [],
+                    orders: [o],
+                    generalNotes: '',
+                    tags: [],
+                    assignedTo: o.assignedTo || undefined
+                });
+            }
+        });
+
+        // Enriched Customer Data
+        try {
+            const { data: customerDetails } = await supabase.from('customers').select('*');
+            if (customerDetails) {
+                customerDetails.forEach(c => {
+                     const existing = customerMap.get(c.phone);
+                     if (existing) {
+                         Object.assign(existing, {
+                             name: c.name,
+                             email: c.email,
+                             address: c.address,
+                             location: c.location,
+                             customerGroup: c.customer_group,
+                             relationshipStatus: c.relationship_status,
+                             gender: c.gender,
+                             dateOfBirth: c.date_of_birth,
+                             occupation: c.occupation,
+                             profileCompleteness: c.profile_completeness,
+                             assignedTo: c.assigned_to || existing.assignedTo
+                         });
+                     }
+                });
+            }
+        } catch (e) { console.warn("Lỗi fetch chi tiết khách hàng", e); }
+
+        setCustomers(Array.from(customerMap.values()));
+
+    } catch (err: any) {
+        console.error("Fetch Data Error - Switching to Local Mode:", err);
+        // TỰ ĐỘNG CHUYỂN SANG LOCAL MODE KHI API LỖI
+        setUseLocalOnly(true);
+        setLeads(localLeads);
+        setCskhItems(localCskh);
+        setOrders(localOrders);
+        setReExaminations(localReExams);
+        // Mock customers again for local fallback...
+        const customerMap = new Map<string, Customer>();
+        localLeads.forEach(l => {
+             if(!customerMap.has(l.phone)) customerMap.set(l.phone, { name: l.name, phone: l.phone, leads: [l], orders: [], generalNotes: '', tags: [] });
+             else customerMap.get(l.phone)?.leads.push(l);
+        });
+        setCustomers(Array.from(customerMap.values()));
+    } finally {
+        setIsRefreshing(false);
+    }
+  }, [session, useLocalOnly, localLeads, localCskh, localOrders, localReExams]);
+
+  // --- Auth Effect ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchUserProfile(session.user.id);
-      else setIsLoading(false);
+        setSession(session);
+        if (session) {
+            setCurrentUser(session.user.id);
+            // Fetch profile - if fail, fallback to a mock admin for offline test
+            supabase.from('profiles').select('*').eq('id', session.user.id).single()
+                .then(({ data }) => {
+                    if (data) setUserProfile(data);
+                    else {
+                        // Mock profile if DB fails but Auth works (common in dev with bad RLS)
+                        setUserProfile({ id: session.user.id, name: session.user.email || 'User', role: 'admin' });
+                    }
+                }, () => setUserProfile({ id: session.user.id, name: 'Offline User', role: 'admin' }));
+            
+            fetchData(true);
+        }
     });
 
     const {
-      data: { subscription },
+        data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) fetchUserProfile(session.user.id);
-      else {
-          setUserProfile(null);
-          if (!useLocalOnly) setIsLoading(false);
-      }
+        setSession(session);
+        if (session) {
+            setCurrentUser(session.user.id);
+             supabase.from('profiles').select('*').eq('id', session.user.id).single()
+                .then(({ data }) => {
+                    if (data) setUserProfile(data);
+                });
+            fetchData(true);
+        } else {
+            setCurrentUser('');
+            setUserProfile(null);
+            setLeads([]);
+        }
     });
 
     return () => subscription.unsubscribe();
-  }, [useLocalOnly]);
+  }, []); // Remove fetchData from dependency to avoid loop
 
-  const fetchUserProfile = async (userId: string) => {
-      try {
-          const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-          if (error) throw error;
-          
-          if (data) {
-              setUserProfile(data);
-          } else {
-              // Profile deleted or restricted -> Sign out to enforce security
-              if (!useLocalOnly) {
-                  await supabase.auth.signOut();
-              }
-              setUserProfile(null);
-          }
-      } catch (error) {
-          console.error('Error fetching profile:', error);
-          if (!useLocalOnly) await supabase.auth.signOut();
-      } finally {
-          setIsLoading(false);
-      }
-  };
-
-  // --- EFFECT: FETCH DATA ---
-  const fetchData = useCallback(async (force = false, silent = false) => {
-      if (useLocalOnly) {
-          setLeads(localLeads);
-          setCskhItems(localCskh);
-          setCustomersData(localCustomers);
-          setOrders(localOrders);
-          setSales(INITIAL_SALES); // In offline, use constant
-          setIsLoading(false);
-          return;
-      }
-
-      if (!session && !force) return;
-
-      if (!silent) setIsRefreshing(true);
-      setConnectionError(null);
-      
-      try {
-          // 1. Fetch Profiles (Sales)
-          const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*');
-          if (profilesError) throw profilesError;
-          if (profiles) setSales(profiles);
-
-          // 2. Fetch Settings (Sources, Relationships, Groups, Roles)
-          const { data: settings, error: settingsError } = await supabase.from('app_settings').select('*');
-          if (!settingsError && settings) {
-              settings.forEach((s: any) => {
-                  if (s.key === 'sources') setSources(s.value);
-                  if (s.key === 'relationships') setRelationships(s.value);
-                  if (s.key === 'customer_groups') setCustomerGroups(s.value);
-                  if (s.key === 'user_roles') setRoles(s.value);
-              });
-          }
-
-          // 3. Fetch Customers
-          const { data: custs, error: custsError } = await supabase.from('customers').select('*');
-          if (custsError) throw custsError;
-          const custMap: Record<string, CustomerData> = {};
-          custs?.forEach((c: any) => {
-              // Map DB snake_case to app camelCase
-              custMap[c.phone] = {
-                  ...c,
-                  dateOfBirth: c.date_of_birth,
-                  customerGroup: c.customer_group,
-                  relationshipStatus: c.relationship_status,
-                  generalNotes: c.general_notes,
-                  profileCompleteness: c.profile_completeness,
-                  userAgent: c.user_agent,
-                  sourceUrl: c.source_url,
-                  utmSource: c.utm_source,
-                  utmMedium: c.utm_medium,
-                  eventId: c.event_id,
-                  externalId: c.external_id,
-                  assignedTo: c.assigned_to,
-                  // ... map other fields if necessary
-              };
-          });
-          setCustomersData(custMap);
-
-          // 4. Fetch Leads
-          const { data: leadsData, error: leadsError } = await supabase.from('leads').select(`
-            *,
-            notes (*)
-          `).order('created_at', { ascending: false });
-          
-          if (leadsError) throw leadsError;
-          
-          const formattedLeads: Lead[] = leadsData.map((l: any) => ({
-              id: l.id,
-              name: l.name || custMap[l.phone]?.name || l.phone, // Fallback to customer name or phone if lead name is missing
-              phone: l.phone,
-              source: l.source,
-              assignedTo: l.assigned_to,
-              status: l.status,
-              cskhStatus: l.cskh_status,
-              service: l.service,
-              description: l.description,
-              priority: l.priority,
-              potentialRevenue: l.potential_revenue,
-              appointmentDate: l.appointment_date,
-              projectedAppointmentDate: l.projected_appointment_date,
-              createdAt: l.created_at,
-              updatedAt: l.updated_at,
-              notes: (l.notes || []).map((n: any) => ({
-                  id: n.id,
-                  content: n.content,
-                  createdAt: n.created_at,
-                  createdBy: n.created_by
-              })).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          }));
-          setLeads(formattedLeads);
-
-          // 5. Fetch CSKH
-          const { data: cskhData, error: cskhError } = await supabase.from('cskh').select('*').order('created_at', { ascending: false });
-          if (cskhError) throw cskhError;
-          
-          const formattedCskh: CskhItem[] = cskhData.map((c: any) => {
-              const cust = custMap[c.customer_phone];
-              return {
-                  id: c.id,
-                  customerPhone: c.customer_phone,
-                  customerName: cust ? cust.name || c.customer_phone : c.customer_phone,
-                  service: c.service,
-                  status: c.status,
-                  assignedTo: c.assigned_to,
-                  originalLeadId: c.original_lead_id,
-                  createdAt: c.created_at,
-                  updatedAt: c.updated_at,
-                  doctorName: c.doctor_name // Map doctor_name
-              };
-          });
-          setCskhItems(formattedCskh);
-
-          // 6. Fetch Orders
-          const { data: ordersData, error: ordersError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-          if (ordersError) throw ordersError;
-          
-          const formattedOrders: Order[] = ordersData.map((o: any) => {
-               const cust = custMap[o.customer_phone];
-               return {
-                  id: o.id,
-                  externalId: o.external_id,
-                  customerPhone: o.customer_phone,
-                  customerName: cust ? cust.name : undefined,
-                  service: o.service,
-                  revenue: o.revenue,
-                  status: o.status,
-                  source: o.source,
-                  assignedTo: o.assigned_to,
-                  createdAt: o.created_at
-              };
-          });
-          setOrders(formattedOrders);
-
-      } catch (err: any) {
-          console.error('Fetch error:', err);
-          setConnectionError(formatErrorMessage(err));
-      } finally {
-          if (!silent) setIsRefreshing(false);
-          setIsLoading(false);
-      }
-  }, [useLocalOnly, session, localLeads, localCskh, localCustomers, localOrders]);
-
-  // Initial fetch
-  useEffect(() => {
-      fetchData();
-  }, [fetchData]);
-
-  // --- REALTIME SUBSCRIPTION ---
-  const fetchDataRef = useRef(fetchData);
-  useEffect(() => {
-      fetchDataRef.current = fetchData;
-  }, [fetchData]);
-
-  useEffect(() => {
-    if (useLocalOnly || !session) return;
-
-    const channel = supabase.channel('global-db-changes')
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'leads' },
-            () => fetchDataRef.current(true, true)
-        )
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'customers' },
-            () => fetchDataRef.current(true, true)
-        )
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'orders' },
-            () => fetchDataRef.current(true, true)
-        )
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'cskh' },
-            () => fetchDataRef.current(true, true)
-        )
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'notes' },
-            () => fetchDataRef.current(true, true)
-        )
-        .subscribe();
-
-    return () => {
-        supabase.removeChannel(channel);
-    };
-  }, [useLocalOnly, session]);
-
-  const selectedCustomer = useMemo(() => customers.find(c => c.phone === selectedCustomerPhone) || null, [customers, selectedCustomerPhone]);
-
-  const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
-
-  // --- HELPERS FOR SETTINGS UPDATE ---
-  const handleUpdateSetting = async (key: string, newValue: any[]) => {
-      if (!hasPermission('settings.access')) {
-          alert('Bạn không có quyền thay đổi cài đặt.');
-          return;
-      }
-
-      if (key === 'sources') setSources(newValue);
-      else if (key === 'relationships') setRelationships(newValue);
-      else if (key === 'customer_groups') setCustomerGroups(newValue);
-      else if (key === 'user_roles') setRoles(newValue);
-
-      if (useLocalOnly) return;
-
-      try {
-          const { error } = await supabase.from('app_settings').upsert({ key, value: newValue });
-          if (error) throw error;
-      } catch (err: any) {
-          alert('Lỗi lưu cài đặt: ' + formatErrorMessage(err));
-          fetchData(true);
-      }
-  };
-
-  // --- ACTIONS ---
-
-  const handleAddNote = async (leadId: string, content: string) => {
-      if (!content.trim()) return;
-
-      if (useLocalOnly) {
-          const newNote: Note = {
-              id: `note_${Date.now()}`,
-              content: content,
-              createdAt: new Date().toISOString(),
-              createdBy: currentUser
-          };
-          
-          const newLeads = leads.map(l => {
-              if (l.id === leadId) {
-                  return { ...l, notes: [newNote, ...(l.notes || [])], updatedAt: new Date().toISOString() };
-              }
-              return l;
-          });
-          setLeads(newLeads);
-          setLocalLeads(newLeads);
-      } else {
-          try {
-              const { error } = await supabase.from('notes').insert([{
-                  id: `note_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-                  lead_id: leadId,
-                  content: content,
-                  created_by: currentUser
-              }]);
-              if (error) throw error;
-              await supabase.from('leads').update({ updated_at: new Date().toISOString() }).eq('id', leadId);
-          } catch (err: any) {
-              alert("Lỗi thêm ghi chú: " + formatErrorMessage(err));
-          }
-      }
-  };
-
-  const handleBulkDeleteCustomers = (phones: string[]) => {
-      if (!hasPermission('customer.delete')) {
-          alert("BẠN KHÔNG CÓ QUYỀN XÓA KHÁCH HÀNG.");
-          return;
-      }
-      if (phones.length === 0) return;
-
-      setConfirmModal({
-          isOpen: true,
-          title: `XÓA ${phones.length} KHÁCH HÀNG`,
-          message: `Bạn sắp xóa vĩnh viễn ${phones.length} khách hàng đã chọn.\n\nTất cả dữ liệu liên quan (cơ hội, đơn hàng, ghi chú) cũng sẽ bị xóa.`,
-          isDangerous: true,
-          onConfirm: () => executeBulkDeleteCustomers(phones)
-      });
-  };
-
-  const executeBulkDeleteCustomers = async (phones: string[]) => {
-      closeConfirmModal();
-      setIsRefreshing(true);
-      try {
-          if (!useLocalOnly) {
-              const { data: leadData } = await supabase.from('leads').select('id').in('phone', phones);
-              const leadIds = leadData?.map(l => l.id) || [];
-              if (leadIds.length > 0) await supabase.from('notes').delete().in('lead_id', leadIds);
-              await supabase.from('cskh').delete().in('customer_phone', phones);
-              await supabase.from('leads').delete().in('phone', phones);
-              await supabase.from('orders').delete().in('customer_phone', phones);
-              const { error } = await supabase.from('customers').delete().in('phone', phones);
-              if (error) throw error;
-          } else {
-              const newLeads = leads.filter(l => !phones.includes(l.phone));
-              const newCskh = cskhItems.filter(c => !phones.includes(c.customerPhone));
-              const newOrders = orders.filter(o => !phones.includes(o.customerPhone));
-              const newCustomers = { ...customersData };
-              phones.forEach(p => delete newCustomers[p]);
-              setLeads(newLeads); setLocalLeads(newLeads);
-              setCskhItems(newCskh); setLocalCskh(newCskh);
-              setOrders(newOrders); setLocalOrders(newOrders);
-              setCustomersData(newCustomers); setLocalCustomers(newCustomers);
-          }
-      } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
-  };
-
-  const handleBulkDeleteOrders = (orderIds: string[]) => {
-      if (!hasPermission('order.delete')) {
-          alert("BẠN KHÔNG CÓ QUYỀN XÓA ĐƠN HÀNG.");
-          return;
-      }
-      if (orderIds.length === 0) return;
-
-      setConfirmModal({
-          isOpen: true,
-          title: `XÓA ${orderIds.length} ĐƠN HÀNG`,
-          message: `Bạn có chắc chắn muốn xóa ${orderIds.length} đơn hàng đã chọn?`,
-          isDangerous: true,
-          onConfirm: () => executeBulkDeleteOrders(orderIds)
-      });
-  };
-
-  const executeBulkDeleteOrders = async (orderIds: string[]) => {
-      closeConfirmModal();
-      setIsRefreshing(true);
-      try {
-          if (!useLocalOnly) {
-              const { error } = await supabase.from('orders').delete().in('id', orderIds);
-              if (error) throw error;
-          } else {
-              const newOrders = orders.filter(o => !orderIds.includes(o.id));
-              setOrders(newOrders); setLocalOrders(newOrders);
-          }
-      } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
-  };
-
-  const handleDeleteCustomer = (phone: string) => {
-    if (!hasPermission('customer.delete')) { alert("BẠN KHÔNG CÓ QUYỀN XÓA KHÁCH HÀNG."); return; }
-    const customer = customers.find(c => c.phone === phone);
-    if (!customer) return;
-    setConfirmModal({
-        isOpen: true,
-        title: '⚠️ CẢNH BÁO XÓA DỮ LIỆU',
-        message: `Bạn sắp xóa khách hàng: ${customer.name}\n\nHành động này không thể hoàn tác.`,
-        isDangerous: true,
-        onConfirm: () => executeDeleteCustomer(phone)
-    });
-  };
-
-  const executeDeleteCustomer = async (phone: string) => {
-    closeConfirmModal();
-    setIsRefreshing(true);
-    try {
-        if (!useLocalOnly) {
-            const { data: leadData } = await supabase.from('leads').select('id').eq('phone', phone);
-            const leadIds = leadData?.map(l => l.id) || [];
-            if (leadIds.length > 0) await supabase.from('notes').delete().in('lead_id', leadIds);
-            await supabase.from('cskh').delete().eq('customer_phone', phone);
-            await supabase.from('leads').delete().eq('phone', phone);
-            await supabase.from('orders').delete().eq('customer_phone', phone);
-            const { error: custError } = await supabase.from('customers').delete().eq('phone', phone);
-            if (custError) throw custError;
-        } else {
-            const newLeads = leads.filter(l => l.phone !== phone);
-            const newCskh = cskhItems.filter(c => c.customerPhone !== phone);
-            const newOrders = orders.filter(o => o.customerPhone !== phone);
-            const newCustomers = { ...customersData };
-            delete newCustomers[phone];
-            setLeads(newLeads); setLocalLeads(newLeads);
-            setCskhItems(newCskh); setLocalCskh(newCskh);
-            setOrders(newOrders); setLocalOrders(newOrders);
-            setCustomersData(newCustomers); setLocalCustomers(newCustomers);
-        }
-        if (selectedCustomerPhone === phone) {
-            setSelectedCustomerPhone(null);
-            setCustomerViewMode('list');
-        }
-    } catch (err: any) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
-  };
-
-  const handleDeleteLead = (leadId: string) => {
-    if (!hasPermission('lead.delete')) { alert("Bạn không có quyền xóa cơ hội này."); return; }
-    const lead = leads.find(l => l.id === leadId);
-    if (!lead) return;
-    setConfirmModal({
-        isOpen: true,
-        title: 'Xóa cơ hội',
-        message: `Bạn có chắc chắn muốn xóa cơ hội "${lead.name}"?`,
-        isDangerous: true,
-        onConfirm: () => executeDeleteLead(leadId)
-    });
-  };
+  // --- Actions (Giữ nguyên logic, thêm check useLocalOnly) ---
 
   const executeDeleteLead = async (leadId: string) => {
     closeConfirmModal();
-    setIsRefreshing(true);
+    const prevLeads = [...leads];
+    setLeads(current => current.filter(l => l.id !== leadId));
+    if (selectedLead?.id === leadId) setSelectedLead(null);
+
+    if (useLocalOnly) {
+        const newLeads = leads.filter(l => l.id !== leadId);
+        setLocalLeads(newLeads);
+        return;
+    }
+
     try {
-        if (!useLocalOnly) {
-            await supabase.from('notes').delete().eq('lead_id', leadId);
-            const { error: leadError } = await supabase.from('leads').delete().eq('id', leadId);
-            if (leadError) throw leadError;
-        } else {
-            const newLeads = leads.filter(l => l.id !== leadId);
-            setLeads(newLeads); setLocalLeads(newLeads);
-        }
-        if (selectedLead?.id === leadId) setSelectedLead(null);
-    } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
+        await supabase.from('notes').delete().eq('lead_id', leadId);
+        const { error } = await supabase.from('leads').delete().eq('id', leadId);
+        if (error) throw error;
+    } catch (err) { 
+        setLeads(prevLeads);
+        alert(formatErrorMessage(err)); 
+    }
+  };
+
+  const executeDeleteCskh = async (cskhId: string, requireConfirm = true) => {
+      try {
+          console.log('Attempting to delete CSKH item:', cskhId);
+          
+          if (requireConfirm) {
+              // Thêm một khoảng trễ nhỏ để tránh xung đột với các sự kiện click/drag khác
+              await new Promise(resolve => setTimeout(resolve, 150));
+              const confirmed = window.confirm("Bạn có chắc chắn muốn xóa mục CSKH này?");
+              console.log('Confirmation result for', cskhId, ':', confirmed);
+              if (!confirmed) {
+                  console.log('Deletion cancelled by user');
+                  return;
+              }
+          }
+          
+          if (!cskhItems) {
+              console.error('cskhItems is undefined or null');
+              return;
+          }
+
+          const prevItems = [...cskhItems];
+          
+          // Optimistic update
+          setCskhItems(current => current.filter(item => item.id !== cskhId));
+          
+          if (selectedCskh && selectedCskh.id === cskhId) {
+              setSelectedCskh(null);
+          }
+
+          if (useLocalOnly) {
+              console.log('Deleting from local storage');
+              setLocalCskh(prev => prev.filter(item => item.id !== cskhId));
+              return;
+          }
+
+          console.log('Deleting from Supabase');
+          const { error } = await supabase.from('cskh').delete().eq('id', cskhId);
+          
+          if (error) {
+              console.error('Supabase delete error:', error);
+              // Revert optimistic update
+              setCskhItems(prevItems);
+              throw error;
+          }
+          console.log('Successfully deleted from Supabase');
+      } catch (err) {
+          console.error('Delete failed:', err);
+          alert(formatErrorMessage(err));
+      }
+  };
+
+  const handleAddOrder = async (orderData: any) => {
+      setIsAddOrderModalOpen(false);
+      setIsRefreshing(true);
+      
+      const newOrder = {
+          ...orderData,
+          id: `ord_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          status: 'completed',
+          assignedTo: currentUser
+      };
+
+      if (useLocalOnly) {
+          setOrders(prev => [newOrder, ...prev]);
+          setLocalOrders(prev => [newOrder, ...prev]);
+          setIsRefreshing(false);
+          return;
+      }
+
+      try {
+          const { error } = await supabase.from('orders').insert([{
+              customer_phone: newOrder.customerPhone,
+              service: newOrder.service,
+              revenue: newOrder.revenue,
+              created_at: newOrder.createdAt,
+              status: newOrder.status,
+              assigned_to: newOrder.assignedTo,
+              customer_name: newOrder.customerName
+          }]);
+          if (error) throw error;
+          fetchData(true);
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      } finally {
+          setIsRefreshing(false);
+      }
   };
 
   const handleDeleteOrder = (orderId: string) => {
@@ -651,15 +617,64 @@ function App() {
   const executeDeleteOrder = async (orderId: string) => {
       closeConfirmModal();
       setIsRefreshing(true);
+      if (useLocalOnly) {
+          const newOrders = orders.filter(o => o.id !== orderId);
+          setOrders(newOrders);
+          setLocalOrders(newOrders);
+          setIsRefreshing(false);
+          return;
+      }
       try {
-          if (!useLocalOnly) {
-              const { error } = await supabase.from('orders').delete().eq('id', orderId);
-              if (error) throw error;
-          } else {
-              const newOrders = orders.filter(o => o.id !== orderId);
-              setOrders(newOrders); setLocalOrders(newOrders);
-          }
+          const { error } = await supabase.from('orders').delete().eq('id', orderId);
+          if (error) throw error;
+          setOrders(prev => prev.filter(o => o.id !== orderId));
       } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
+  };
+
+  const handleImportOrders = async (newOrders: any[]) => {
+      setIsImportOrderModalOpen(false);
+      setIsRefreshing(true);
+
+      const ordersToInsert = newOrders.map(o => ({
+          id: `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          customerPhone: o.customerPhone,
+          service: o.service,
+          revenue: o.revenue,
+          createdAt: o.createdAt,
+          status: o.status,
+          assignedTo: currentUser,
+          externalId: o.externalId,
+          source: o.source || 'import',
+          customerName: o.customerName
+      }));
+
+      if (useLocalOnly) {
+          setOrders(prev => [...ordersToInsert, ...prev]);
+          setLocalOrders(prev => [...ordersToInsert, ...prev]);
+          setIsRefreshing(false);
+          return;
+      }
+
+      try {
+          const { error } = await supabase.from('orders').insert(ordersToInsert.map(o => ({
+              customer_phone: o.customerPhone,
+              service: o.service,
+              revenue: o.revenue,
+              created_at: o.createdAt,
+              status: o.status,
+              assigned_to: o.assignedTo,
+              external_id: o.externalId,
+              source: o.source,
+              customer_name: o.customerName
+          })));
+          
+          if (error) throw error;
+          fetchData(true);
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      } finally {
+          setIsRefreshing(false);
+      }
   };
 
   const handleUpdateLeadStatus = async (id: string, newStatus: string) => {
@@ -669,72 +684,97 @@ function App() {
         return;
     }
 
+    const prevLeads = [...leads];
+    const now = new Date().toISOString();
+    
+    setLeads(current => current.map(l => l.id === id ? { ...l, status: newStatus, updatedAt: now } : l));
+
     if (useLocalOnly) {
-         const newLeads = leads.map(l => l.id === id ? { ...l, status: newStatus, updatedAt: new Date().toISOString() } : l);
-         setLeads(newLeads); setLocalLeads(newLeads);
+         setLocalLeads(prev => prev.map(l => l.id === id ? { ...l, status: newStatus, updatedAt: now } : l));
          return;
     }
 
     try {
-        const { error } = await supabase.from('leads').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', id);
+        const { error } = await supabase.from('leads').update({ status: newStatus, updated_at: now }).eq('id', id);
         if (error) throw error;
-    } catch(err) { alert(formatErrorMessage(err)); }
+    } catch(err) { 
+        setLeads(prevLeads);
+        alert(formatErrorMessage(err)); 
+    }
   };
 
-  const executeLeadCompletion = async (data: { actualRevenue: number; actualService: string; note: string; doctorName: string }) => {
+  const executeLeadCompletion = async (data: { actualRevenue: number; actualService: string; note: string; doctorName: string; reExaminationDate: string; reExamService?: string; reExamNote?: string; reExamRevenue?: number }) => {
       if (!leadToComplete) return;
       const targetLead = leadToComplete;
       setLeadToComplete(null);
       
-      const { actualRevenue, actualService, note, doctorName } = data;
+      const { actualRevenue, actualService, note, doctorName, reExaminationDate, reExamService, reExamNote, reExamRevenue } = data;
       const updatedNoteContent = note ? `[CHỐT ĐƠN] ${note}` : undefined;
+      const now = new Date().toISOString();
 
-      if (useLocalOnly) {
-          const now = new Date().toISOString();
-          const newLeads = leads.map(l => {
-              if (l.id === targetLead.id) {
-                  const updatedLead = { 
-                      ...l, 
-                      status: 'completed', 
-                      potentialRevenue: actualRevenue, 
-                      service: actualService,
-                      updatedAt: now 
-                  };
-                  if (updatedNoteContent) {
-                      updatedLead.notes = [{
-                          id: `note_${Date.now()}`,
-                          content: updatedNoteContent,
-                          createdAt: now,
-                          createdBy: currentUser
-                      }, ...(updatedLead.notes || [])];
-                  }
-                  return updatedLead;
-              }
-              return l;
-          });
-          setLeads(newLeads); setLocalLeads(newLeads);
+      const updatedLeadState = { 
+          ...targetLead, 
+          status: 'completed', 
+          potentialRevenue: actualRevenue, 
+          service: actualService,
+          updatedAt: now,
+          notes: updatedNoteContent ? [{
+              id: `note_temp_${Date.now()}`,
+              content: updatedNoteContent,
+              createdAt: now,
+              createdBy: currentUser
+          }, ...(targetLead.notes || [])] : (targetLead.notes || [])
+      };
 
-          const newCskhItem: CskhItem = {
-              id: `cskh_${Date.now()}`,
+      setLeads(prev => prev.map(l => l.id === targetLead.id ? updatedLeadState : l));
+      if (selectedLead?.id === targetLead.id) setSelectedLead(null);
+
+      // Local update for immediate feedback
+      const newCskhItem: CskhItem = {
+          id: `cskh_${Date.now()}`,
+          customerPhone: targetLead.phone,
+          customerName: targetLead.name,
+          service: actualService,
+          status: 'cskh_new',
+          assignedTo: targetLead.assignedTo,
+          originalLeadId: targetLead.id,
+          createdAt: now,
+          updatedAt: now,
+          doctorName: doctorName,
+          reExaminationDate: reExaminationDate || null
+      };
+      setCskhItems(prev => [newCskhItem, ...prev]);
+
+      // Also create ReExamination if date is set
+      if (reExaminationDate) {
+          const newReExam: ReExamination = {
+              id: `re_exam_${Date.now()}`,
               customerPhone: targetLead.phone,
               customerName: targetLead.name,
-              service: actualService,
-              status: 'cskh_new',
-              assignedTo: targetLead.assignedTo,
-              originalLeadId: targetLead.id,
+              date: reExaminationDate,
+              service: reExamService || actualService,
+              doctorName: doctorName,
+              assignedTo: targetLead.assignedTo || undefined,
+              status: 'pending',
+              note: reExamNote || '',
               createdAt: now,
-              updatedAt: now,
-              doctorName: doctorName // Save doctor
+              potentialRevenue: reExamRevenue
           };
-          const updatedCskh = [newCskhItem, ...cskhItems];
-          setCskhItems(updatedCskh); setLocalCskh(updatedCskh);
-          if (selectedLead?.id === targetLead.id) setSelectedLead(null);
+          setReExaminations(prev => [...prev, newReExam]);
+          if (useLocalOnly) {
+             setLocalReExams(prev => [...prev, newReExam]);
+          }
+      }
+
+      if (useLocalOnly) {
+          const newLeads = leads.map(l => l.id === targetLead.id ? updatedLeadState : l);
+          setLocalLeads(newLeads);
+          setLocalCskh([newCskhItem, ...cskhItems]);
           return;
       }
 
       setIsRefreshing(true);
       try {
-          const now = new Date().toISOString();
           const { error: leadError } = await supabase.from('leads').update({ 
               status: 'completed', 
               potential_revenue: actualRevenue,
@@ -745,376 +785,842 @@ function App() {
 
           if (updatedNoteContent) {
               await supabase.from('notes').insert([{
-                  id: `note_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
                   lead_id: targetLead.id,
                   content: updatedNoteContent,
                   created_by: currentUser
               }]);
           }
 
-          await supabase.from('cskh').insert([{
+          const { error: cskhError } = await supabase.from('cskh').insert([{
+              id: newCskhItem.id,
               customer_phone: targetLead.phone,
               service: actualService,
               status: 'cskh_new',
               assigned_to: targetLead.assignedTo,
               original_lead_id: targetLead.id,
-              doctor_name: doctorName // Insert doctor_name
+              doctor_name: doctorName,
+              re_examination_date: reExaminationDate || null
           }]);
-          if (selectedLead?.id === targetLead.id) setSelectedLead(null);
-      } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
+          if (cskhError) throw cskhError;
+
+          if (reExaminationDate) {
+              const { error: reExamError } = await supabase.from('re_examinations').insert([{
+                  id: `re_exam_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  customer_phone: targetLead.phone,
+                  customer_name: targetLead.name,
+                  date: reExaminationDate,
+                  service: reExamService || actualService,
+                  doctor_name: doctorName,
+                  assigned_to: targetLead.assignedTo,
+                  status: 'pending',
+                  note: reExamNote || '',
+                  potential_revenue: reExamRevenue
+              }]);
+              if (reExamError) throw reExamError;
+          }
+
+      } catch (err) { 
+          alert(formatErrorMessage(err));
+          fetchData(true); 
+      } finally { setIsRefreshing(false); }
   };
 
   const handleUpdateCskhStatus = async (cskhId: string, newStatusId: string) => {
+    const prevItems = [...cskhItems];
+    setCskhItems(prev => prev.map(item => item.id === cskhId ? { ...item, status: newStatusId, updatedAt: new Date().toISOString() } : item));
+
+    if (useLocalOnly) {
+        setLocalCskh(prev => prev.map(item => item.id === cskhId ? { ...item, status: newStatusId, updatedAt: new Date().toISOString() } : item));
+        return;
+    }
+
+    try {
+        const { error } = await supabase.from('cskh').update({ status: newStatusId, updated_at: new Date().toISOString() }).eq('id', cskhId);
+        if (error) throw error;
+    } catch (err) {
+        alert(formatErrorMessage(err));
+        setCskhItems(prevItems);
+    }
+  };
+
+  const handleUpdateCskhItem = async (updatedItem: CskhItem) => {
+      const now = new Date().toISOString();
+      const itemToSave = { ...updatedItem, updatedAt: now };
+      
+      setCskhItems(prev => prev.map(item => item.id === itemToSave.id ? itemToSave : item));
+      setSelectedCskh(null);
+
       if (useLocalOnly) {
-          const updated = cskhItems.map(item => item.id === cskhId ? { ...item, status: newStatusId, updatedAt: new Date().toISOString() } : item);
-          setCskhItems(updated); setLocalCskh(updated);
+          setLocalCskh(prev => prev.map(item => item.id === itemToSave.id ? itemToSave : item));
           return;
       }
+
       try {
-          const { error } = await supabase.from('cskh').update({ status: newStatusId, updated_at: new Date().toISOString() }).eq('id', cskhId);
+          const { error } = await supabase.from('cskh').update({
+              status: itemToSave.status,
+              assigned_to: itemToSave.assignedTo,
+              doctor_name: itemToSave.doctorName,
+              re_examination_date: itemToSave.reExaminationDate,
+              updated_at: now
+          }).eq('id', itemToSave.id);
+          
           if (error) throw error;
-      } catch (err) { alert(formatErrorMessage(err)); }
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
   };
 
-  const handleDeleteCskh = (cskhId: string) => {
-      if (!hasPermission('lead.delete')) { alert("Bạn không có quyền xóa phiếu CSKH."); return; }
-      const item = cskhItems.find(i => i.id === cskhId);
-      if (!item) return;
-      setConfirmModal({
-        isOpen: true,
-        title: 'Xóa phiếu CSKH',
-        message: `Bạn có chắc chắn muốn xóa phiếu chăm sóc của "${item.customerName}"?`,
-        isDangerous: true,
-        onConfirm: () => executeDeleteCskh(cskhId)
-      });
-  };
+  const handleUpdateReExamStatus = async (id: string, status: 'pending' | 'called' | 'completed' | 'cancelled' | 'converted') => {
+      const prevReExams = [...reExaminations];
+      setReExaminations(prev => prev.map(item => item.id === id ? { ...item, status } : item));
 
-  const executeDeleteCskh = async (cskhId: string) => {
-      closeConfirmModal();
-      setIsRefreshing(true);
+      if (useLocalOnly) {
+          setLocalReExams(prev => prev.map(item => item.id === id ? { ...item, status } : item));
+          return;
+      }
+
       try {
-        if (!useLocalOnly) {
-            const { error } = await supabase.from('cskh').delete().eq('id', cskhId);
-            if (error) throw error;
-        } else {
-            const updated = cskhItems.filter(item => item.id !== cskhId);
-            setCskhItems(updated); setLocalCskh(updated);
-        }
-        if (selectedLead) {
-             const isRelated = (selectedLead.id === `ghost_${cskhId}`) || 
-                               (cskhItems.find(i => i.id === cskhId)?.originalLeadId === selectedLead.id);
-             if (isRelated) setSelectedLead(null);
-        }
-      } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
+          const { error } = await supabase.from('re_examinations').update({ status }).eq('id', id);
+          if (error) throw error;
+      } catch (err) {
+          alert(formatErrorMessage(err));
+          setReExaminations(prevReExams);
+      }
+  };
+
+  const handleUpdateReExam = async (updatedReExam: ReExamination) => {
+      const now = new Date().toISOString();
+      const itemToSave = { ...updatedReExam, updatedAt: now };
+      
+      setReExaminations(prev => prev.map(item => item.id === itemToSave.id ? itemToSave : item));
+      setSelectedReExam(null);
+
+      if (useLocalOnly) {
+          setLocalReExams(prev => prev.map(item => item.id === itemToSave.id ? itemToSave : item));
+          return;
+      }
+
+      try {
+          const { error } = await supabase.from('re_examinations').update({
+              service: itemToSave.service,
+              date: itemToSave.date,
+              appointment_time: itemToSave.appointmentTime,
+              doctor_name: itemToSave.doctorName,
+              assigned_to: itemToSave.assignedTo,
+              note: itemToSave.note,
+              status: itemToSave.status,
+              potential_revenue: itemToSave.potentialRevenue,
+              updated_at: now
+          }).eq('id', itemToSave.id);
+          
+          if (error) throw error;
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
+  };
+
+  const executeDeleteReExam = async (reExamId: string, requireConfirm = true) => {
+      if (requireConfirm && !window.confirm("Bạn có chắc chắn muốn xóa lịch tái khám này?")) return;
+      
+      const prevItems = [...reExaminations];
+      setReExaminations(current => current.filter(item => item.id !== reExamId));
+      if (selectedReExam?.id === reExamId) setSelectedReExam(null);
+
+      if (useLocalOnly) {
+          setLocalReExams(prev => prev.filter(item => item.id !== reExamId));
+          return;
+      }
+
+      try {
+          const { error } = await supabase.from('re_examinations').delete().eq('id', reExamId);
+          if (error) throw error;
+      } catch (err) {
+          setReExaminations(prevItems);
+          alert(formatErrorMessage(err));
+      }
+  };
+
+  const handleAddReExamination = async (data: any) => {
+      setIsAddReExamModalOpen(false);
+      const now = new Date().toISOString();
+      
+      const newReExam: ReExamination = {
+          id: `re_exam_${Date.now()}`,
+          customerPhone: data.customerPhone,
+          customerName: data.customerName,
+          date: data.date,
+          appointmentTime: data.appointmentTime,
+          service: data.service,
+          doctorName: data.doctorName,
+          assignedTo: data.assignedTo,
+          note: data.note,
+          status: 'pending',
+          createdAt: now,
+          potentialRevenue: data.potentialRevenue
+      };
+
+      setReExaminations(prev => [...prev, newReExam]);
+
+      if (useLocalOnly) {
+          setLocalReExams(prev => [...prev, newReExam]);
+          return;
+      }
+
+      try {
+          const { error } = await supabase.from('re_examinations').insert([{
+              id: newReExam.id,
+              customer_phone: data.customerPhone,
+              customer_name: data.customerName,
+              date: data.date,
+              appointment_time: data.appointmentTime,
+              service: data.service,
+              doctor_name: data.doctorName,
+              assigned_to: data.assignedTo,
+              note: data.note,
+              status: 'pending',
+              potential_revenue: data.potentialRevenue
+          }]);
+          
+          if (error) throw error;
+          fetchData(true);
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
+  };
+
+  const handleConvertReExamToLead = (reExam: ReExamination) => {
+      // For now, just open the Add Lead modal. 
+      // Ideally we would pre-fill data, but that requires updating AddLeadModal props.
+      setIsAddLeadModalOpen(true);
+  };
+
+  const handleAddCustomer = async (data: CustomerData) => {
+      const newCustomer: Customer = {
+          ...data,
+          name: data.name || 'Khách hàng',
+          leads: [],
+          orders: [],
+          tags: data.tags || [],
+          generalNotes: data.generalNotes || '',
+          source: data.source || 'manual',
+          assignedTo: data.assignedTo || currentUser
+      };
+      
+      setCustomers(prev => [newCustomer, ...prev]);
+      
+      if (useLocalOnly) return;
+
+      try {
+          const dbData = {
+              name: data.name,
+              phone: data.phone,
+              email: data.email,
+              address: data.address,
+              location: data.location,
+              province: data.province,
+              district: data.district,
+              ward: data.ward,
+              tags: data.tags,
+              general_notes: data.generalNotes,
+              source: data.source,
+              assigned_to: data.assignedTo,
+              customer_group: data.customerGroup,
+              profile_completeness: data.profileCompleteness,
+              relationship_status: data.relationshipStatus,
+              gender: data.gender,
+              date_of_birth: data.dateOfBirth,
+              occupation: data.occupation,
+              ip: data.ip,
+              user_agent: data.userAgent,
+              fbp: data.fbp,
+              fbc: data.fbc,
+              ttclid: data.ttclid,
+              ttp: data.ttp,
+              source_url: data.sourceUrl,
+              utm_source: data.utmSource,
+              utm_medium: data.utmMedium,
+              event_id: data.eventId,
+              external_id: data.externalId
+          };
+          const { error } = await supabase.from('customers').insert([dbData]);
+          if (error) throw error;
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
   };
 
   const handleUpdateCustomer = async (phone: string, data: Partial<CustomerData>) => {
-      if (!useLocalOnly) {
-          try {
-              const dbData = mapAppCustomerDataToDbCustomer(data);
-              const { error } = await supabase.from('customers').update(dbData).eq('phone', phone);
-              if (error) throw error;
-          } catch(err) { alert(formatErrorMessage(err)); }
-      } else {
-          const updated = { ...customersData, [phone]: { ...customersData[phone], ...data } };
-          setCustomersData(updated); setLocalCustomers(updated);
+      setCustomers(prev => prev.map(c => c.phone === phone ? { ...c, ...data } : c));
+      
+      if (selectedCustomer?.phone === phone) {
+          setSelectedCustomer(prev => prev ? { ...prev, ...data } : null);
+      }
+      
+      if (useLocalOnly) return;
+
+      try {
+          const dbData: any = {};
+          if (data.name !== undefined) dbData.name = data.name;
+          if (data.phone !== undefined) dbData.phone = data.phone;
+          if (data.email !== undefined) dbData.email = data.email;
+          if (data.address !== undefined) dbData.address = data.address;
+          if (data.location !== undefined) dbData.location = data.location;
+          if (data.province !== undefined) dbData.province = data.province;
+          if (data.district !== undefined) dbData.district = data.district;
+          if (data.ward !== undefined) dbData.ward = data.ward;
+          if (data.tags !== undefined) dbData.tags = data.tags;
+          if (data.generalNotes !== undefined) dbData.general_notes = data.generalNotes;
+          if (data.source !== undefined) dbData.source = data.source;
+          if (data.assignedTo !== undefined) dbData.assigned_to = data.assignedTo;
+          if (data.customerGroup !== undefined) dbData.customer_group = data.customerGroup;
+          if (data.profileCompleteness !== undefined) dbData.profile_completeness = data.profileCompleteness;
+          if (data.relationshipStatus !== undefined) dbData.relationship_status = data.relationshipStatus;
+          if (data.gender !== undefined) dbData.gender = data.gender;
+          if (data.dateOfBirth !== undefined) dbData.date_of_birth = data.dateOfBirth;
+          if (data.occupation !== undefined) dbData.occupation = data.occupation;
+          if (data.ip !== undefined) dbData.ip = data.ip;
+          if (data.userAgent !== undefined) dbData.user_agent = data.userAgent;
+          if (data.fbp !== undefined) dbData.fbp = data.fbp;
+          if (data.fbc !== undefined) dbData.fbc = data.fbc;
+          if (data.ttclid !== undefined) dbData.ttclid = data.ttclid;
+          if (data.ttp !== undefined) dbData.ttp = data.ttp;
+          if (data.sourceUrl !== undefined) dbData.source_url = data.sourceUrl;
+          if (data.utmSource !== undefined) dbData.utm_source = data.utmSource;
+          if (data.utmMedium !== undefined) dbData.utm_medium = data.utmMedium;
+          if (data.eventId !== undefined) dbData.event_id = data.eventId;
+          if (data.externalId !== undefined) dbData.external_id = data.externalId;
+
+          const { error } = await supabase.from('customers').update(dbData).eq('phone', phone);
+          if (error) console.error("Error updating customer:", error);
+      } catch (err) {
+          console.error("Error updating customer:", err);
       }
   };
 
-  if (isLoading) return <div className="h-screen flex items-center justify-center bg-white text-slate-500 font-semibold animate-pulse text-sm">Đang tải...</div>;
-  if (!session && !useLocalOnly) return <LoginView />;
+  const handleDeleteCustomer = async (phone: string) => {
+      if (!window.confirm("Bạn có chắc chắn muốn xóa khách hàng này?")) return;
+      
+      setCustomers(prev => prev.filter(c => c.phone !== phone));
+      if (selectedCustomer?.phone === phone) setSelectedCustomer(null);
+      
+      if (useLocalOnly) return;
+
+      try {
+          await supabase.from('customers').delete().eq('phone', phone);
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
+  };
+
+  const handleAddNoteToLead = async (leadId: string, content: string) => {
+      const now = new Date().toISOString();
+      const newNote: Note = {
+          id: `note_${Date.now()}`,
+          content,
+          createdAt: now,
+          createdBy: currentUser
+      };
+
+      setLeads(prev => prev.map(l => {
+          if (l.id === leadId) {
+              return { ...l, notes: [newNote, ...l.notes] };
+          }
+          return l;
+      }));
+
+      if (useLocalOnly) {
+           setLocalLeads(prev => prev.map(l => l.id === leadId ? { ...l, notes: [newNote, ...l.notes] } : l));
+           return;
+      }
+
+      try {
+          const { error } = await supabase.from('notes').insert([{
+              lead_id: leadId,
+              content: content,
+              created_by: currentUser
+          }]);
+          if (error) throw error;
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
+  };
+
+  const handleAddLead = async (leadData: any) => {
+    const now = new Date().toISOString();
+    const newLeadId = `lead_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const newLead = { 
+        ...leadData, 
+        id: newLeadId, 
+        createdAt: now, 
+        updatedAt: now, 
+        notes: [] 
+    };
+    
+    setLeads(prev => [newLead, ...prev]);
+    setIsAddLeadModalOpen(false);
+    
+    if (useLocalOnly) {
+        setLocalLeads(prev => [newLead, ...prev]);
+        return;
+    }
+    
+    try {
+        const { error } = await supabase.from('leads').insert([{
+            id: newLeadId,
+            name: leadData.name,
+            phone: leadData.phone,
+            source: leadData.source,
+            assigned_to: leadData.assignedTo,
+            status: leadData.status,
+            service: leadData.service,
+            description: leadData.description,
+            potential_revenue: leadData.potentialRevenue,
+            projected_appointment_date: leadData.projectedAppointmentDate,
+            appointment_date: leadData.appointmentDate,
+            created_at: now,
+            updated_at: now
+        }]);
+        if (error) throw error;
+        fetchData(true);
+    } catch (err) {
+        alert(formatErrorMessage(err));
+        setLeads(prev => prev.filter(l => l.id !== newLeadId)); // Rollback
+    }
+  };
+
+  const handleUpdateLead = async (updatedLead: Lead) => {
+      const now = new Date().toISOString();
+      const leadToSave = { ...updatedLead, updatedAt: now };
+      
+      setLeads(prev => prev.map(l => l.id === leadToSave.id ? leadToSave : l));
+      setSelectedLead(null); // Close modal
+
+      if (useLocalOnly) {
+          setLocalLeads(prev => prev.map(l => l.id === leadToSave.id ? leadToSave : l));
+          return;
+      }
+
+      try {
+          const { error } = await supabase.from('leads').update({
+              name: leadToSave.name,
+              phone: leadToSave.phone,
+              source: leadToSave.source,
+              assigned_to: leadToSave.assignedTo,
+              status: leadToSave.status,
+              service: leadToSave.service,
+              description: leadToSave.description,
+              potential_revenue: leadToSave.potentialRevenue,
+              projected_appointment_date: leadToSave.projectedAppointmentDate,
+              appointment_date: leadToSave.appointmentDate,
+              updated_at: now
+          }).eq('id', leadToSave.id);
+          
+          if (error) throw error;
+          
+          // Save any new notes that were added optimistically
+          const newNotes = leadToSave.notes.filter(n => n.id.startsWith('note_'));
+          if (newNotes.length > 0) {
+              const { error: notesError } = await supabase.from('notes').insert(
+                  newNotes.map(n => ({
+                      lead_id: leadToSave.id,
+                      content: n.content,
+                      created_by: n.createdBy,
+                      created_at: n.createdAt
+                  }))
+              );
+              if (notesError) console.error("Error saving notes:", notesError);
+          }
+          
+          fetchData(true);
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
+  };
+
+  if (!session && !useLocalOnly) {
+      return <LoginView />;
+  }
+
+  // Determine Dashboard View based on Role
+  const renderDashboard = () => {
+      // Ưu tiên hiển thị theo role trong profile
+      if (userProfile?.role === 'admin') {
+          return (
+            <ReportsView
+                leads={leads}
+                orders={orders}
+                cskhItems={cskhItems}
+                customers={customers.reduce((acc, c) => ({...acc, [c.phone]: c}), {})}
+                sources={sources}
+                sales={sales}
+                reExaminations={reExaminations}
+                activities={activities}
+            />
+          );
+      }
+      return (
+        <SaleDashboard 
+            leads={leads} 
+            cskhItems={cskhItems} 
+            orders={orders} 
+            customers={customers.reduce((acc, c) => ({...acc, [c.phone]: c}), {})} 
+            currentUser={currentUser}
+            sales={sales}
+            onSelectLead={setSelectedLead}
+            onSelectCskh={setSelectedCskh}
+        />
+      );
+  };
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans antialiased relative">
-      <ConfirmationModal 
-        isOpen={confirmModal.isOpen}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        onConfirm={confirmModal.onConfirm}
-        onClose={closeConfirmModal}
-        isDangerous={confirmModal.isDangerous}
-      />
-
+    <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
       <Sidebar 
         activeView={activeView} 
         setActiveView={setActiveView} 
-        isOpen={false} 
-        setIsOpen={() => {}} 
-        onAddLead={() => setIsAddModalOpen(true)}
+        isOpen={isSidebarOpen} 
+        setIsOpen={setIsSidebarOpen}
+        onAddLead={() => setIsAddLeadModalOpen(true)}
         hasPermission={hasPermission}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <MainHeader onAddLead={() => setIsAddModalOpen(true)} onToggleSidebar={() => {}} sales={sales} userProfile={userProfile} />
-        {connectionError && (
-            <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-[11px] text-red-600 flex justify-between items-center">
-                <span>{connectionError}</span>
-                <button onClick={() => fetchData()} className="font-bold underline">Thử lại</button>
-            </div>
-        )}
-        <main className="flex-1 overflow-auto bg-white">
-          {activeView === 'dashboard' && (
-              // Logic hiển thị Dashboard: Admin xem ReportsView, Sale xem SaleDashboard
-              isAdmin ? (
-                  <ReportsView leads={leads} orders={orders} customers={customersData} sources={sources} sales={sales} cskhItems={cskhItems} />
-              ) : (
-                  <SaleDashboard 
-                      leads={leads} 
-                      cskhItems={cskhItems} 
-                      orders={orders} 
-                      customers={customersData} 
-                      currentUser={currentUser}
-                      sales={sales}
-                      onSelectLead={setSelectedLead}
-                      onSelectCskh={(item) => {
-                          // Tái sử dụng logic mở LeadDetail từ CSKH Item (giống trong CskhView)
-                          const lead = leads.find(l => l.id === item.originalLeadId);
-                          if (lead) {
-                              // Inject doctorName from CSKH item to the lead object for the modal
-                              const leadWithDoctor = { 
-                                ...lead, 
-                                doctorName: item.doctorName,
-                                cskhStatus: item.status // Sync status from CSKH item
-                              };
-                              setSelectedLead(leadWithDoctor);
-                          } else {
-                              // Fallback nếu không tìm thấy lead gốc (ghost lead để xem chi tiết)
-                              const ghostLead: Lead = {
-                                  id: item.originalLeadId || `ghost_${item.id}`,
-                                  name: item.customerName, phone: item.customerPhone, source: 'Unknown',
-                                  assignedTo: item.assignedTo, status: 'completed', cskhStatus: item.status,
-                                  service: item.service, description: 'Dữ liệu CSKH (Không tìm thấy cơ hội gốc)',
-                                  priority: null, potentialRevenue: 0, notes: [],
-                                  createdAt: item.createdAt, updatedAt: item.updatedAt,
-                                  appointmentDate: null, projectedAppointmentDate: null,
-                                  doctorName: item.doctorName // Add doctor here too
-                              };
-                              setSelectedLead(ghostLead);
-                          }
-                      }}
-                      onReceiveLead={async (id) => {
-                          if (useLocalOnly) {
-                               const newLeads = leads.map(l => l.id === id ? { ...l, assignedTo: currentUser, status: 'contacting', updatedAt: new Date().toISOString() } : l);
-                               setLeads(newLeads); setLocalLeads(newLeads);
-                          } else {
-                              const { error } = await supabase.from('leads').update({ assigned_to: currentUser, status: 'contacting', updated_at: new Date().toISOString() }).eq('id', id);
-                              if (error) alert(formatErrorMessage(error));
-                          }
-                      }}
-                  />
-              )
-          )}
-          {activeView === 'sales' && (
-            <KanbanBoard 
-                leads={leads} sales={sales} statuses={statuses} onSelectLead={setSelectedLead} 
-                onUpdateLeadStatus={handleUpdateLeadStatus} onAddLead={() => setIsAddModalOpen(true)} 
-                onAcceptLead={async (id) => {
-                    const { error } = await supabase.from('leads').update({ assigned_to: currentUser, status: 'contacting' }).eq('id', id);
-                    if (error) alert(formatErrorMessage(error));
-                }}
-                onDeleteLead={hasPermission('lead.delete') ? handleDeleteLead : undefined}
-                sources={['all', ...sources]} selectedSource="all" onSourceChange={() => {}} onCustomizeStatuses={() => {}} selectedSale="all" onSaleChange={() => {}} 
-            />
-          )}
-          {activeView === 'cskh' && (
-             <CskhView 
-                cskhItems={cskhItems} statuses={cskhStatuses} onUpdateCskhStatus={handleUpdateCskhStatus} 
-                onDeleteCskh={hasPermission('lead.delete') ? handleDeleteCskh : undefined} 
-                onCustomizeStatuses={() => {}} 
-                onSelectCskh={(item) => {
-                    const lead = leads.find(l => l.id === item.originalLeadId);
-                    if (lead) {
-                        const leadWithDoctor = { 
-                            ...lead, 
-                            doctorName: item.doctorName,
-                            cskhStatus: item.status // Sync status from CSKH item
-                        };
-                        setSelectedLead(leadWithDoctor);
-                    } else {
-                        const ghostLead: Lead = {
-                             id: item.originalLeadId || `ghost_${item.id}`,
-                             name: item.customerName, phone: item.customerPhone, source: 'Unknown',
-                             assignedTo: item.assignedTo, status: 'completed', cskhStatus: item.status,
-                             service: item.service, description: 'Dữ liệu CSKH (Không tìm thấy cơ hội gốc)',
-                             priority: null, potentialRevenue: 0, notes: [],
-                             createdAt: item.createdAt, updatedAt: item.updatedAt,
-                             appointmentDate: null, projectedAppointmentDate: null,
-                             doctorName: item.doctorName
-                         };
-                         setSelectedLead(ghostLead);
-                    }
-                }}
-             />
-          )}
-          {activeView === 'customers' && (
-            customerViewMode === 'list' 
-                ? <CustomerList 
-                    customers={customers} onSelectCustomer={(c) => { setSelectedCustomerPhone(c.phone); setCustomerViewMode('detail'); }} 
-                    onAddCustomer={() => { setEditingCustomer(null); setIsCustomerModalOpen(true); }} 
-                    onDeleteCustomer={hasPermission('customer.delete') ? handleDeleteCustomer : undefined} 
-                    onBulkDelete={hasPermission('customer.delete') ? handleBulkDeleteCustomers : undefined}
-                    sources={sources} relationships={relationships} customerGroups={customerGroups} sales={sales}
-                  />
-                : selectedCustomer && <CustomerDetailView customer={selectedCustomer} sales={sales} statuses={statuses} cskhItems={cskhItems.filter(item => item.customerPhone === selectedCustomer.phone)} relationships={relationships} onClose={() => { setCustomerViewMode('list'); setSelectedCustomerPhone(null); }} onSelectLead={setSelectedLead} onUpdateCustomer={handleUpdateCustomer} onEdit={(c) => { setEditingCustomer(c); setIsCustomerModalOpen(true); }} onDelete={hasPermission('customer.delete') ? handleDeleteCustomer : undefined} onAddNote={handleAddNote} currentUser={currentUser} isAdmin={isAdmin} />
-          )}
-          {activeView === 'orders' && (
-            <OrderList 
-                orders={orders} customers={customersData} sales={sales} onAddOrder={() => setIsAddOrderModalOpen(true)} 
-                onImportOrders={() => { if (hasPermission('order.import')) setIsImportOrderModalOpen(true); else alert("Bạn không có quyền sử dụng tính năng này."); }}
-                onDeleteOrder={hasPermission('order.delete') ? handleDeleteOrder : undefined} 
-                canImport={hasPermission('order.import')}
-                onBulkDelete={hasPermission('order.delete') ? handleBulkDeleteOrders : undefined}
-            />
-          )}
-          {activeView === 'revenue' && <CalendarView leads={leads} onSelectLead={setSelectedLead} />}
-          {activeView === 'settings' && hasPermission('settings.access') && (
-            <SettingsView 
-                sources={sources} relationships={relationships} customerGroups={customerGroups} roles={roles}
-                onUpdateSources={(newSources) => handleUpdateSetting('sources', newSources)} 
-                onUpdateRelationships={(newRels) => handleUpdateSetting('relationships', newRels)} 
-                onUpdateCustomerGroups={(newGroups) => handleUpdateSetting('customer_groups', newGroups)} 
-                onUpdateRoles={(newRoles) => handleUpdateSetting('user_roles', newRoles)}
-                useLocalOnly={useLocalOnly} sales={sales} onRefresh={() => fetchData(true)}
-                isAdmin={isAdmin} canEdit={hasPermission('settings.access')}
-            />
-          )}
-          {activeView === 'settings' && !hasPermission('settings.access') && (
-              <div className="flex h-full items-center justify-center text-slate-500">Bạn không có quyền truy cập vào mục này.</div>
-          )}
+      
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <MainHeader 
+            onAddLead={() => setIsAddLeadModalOpen(true)}
+            onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+            sales={sales}
+            userProfile={userProfile}
+        />
+
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 relative">
+            {isRefreshing && (
+                 <div className="absolute top-0 left-0 right-0 h-1 bg-blue-200 overflow-hidden z-20">
+                     <div className="h-full bg-blue-600 animate-progress"></div>
+                 </div>
+            )}
+            
+            {/* Warning Banner for Local Mode */}
+            {useLocalOnly && (
+                <div className="bg-yellow-50 text-yellow-800 text-xs px-4 py-1 text-center border-b border-yellow-200">
+                    Đang chạy chế độ Offline (Dữ liệu lưu trên trình duyệt). Kết nối server gặp sự cố.
+                </div>
+            )}
+            
+            {activeView === 'dashboard' && renderDashboard()}
+            
+            {activeView === 'sales' && (
+               viewMode === 'kanban' ? (
+                <KanbanBoard 
+                    leads={leads}
+                    sales={sales}
+                    statuses={statuses}
+                    onSelectLead={setSelectedLead}
+                    onUpdateLeadStatus={handleUpdateLeadStatus}
+                    onAddLead={() => setIsAddLeadModalOpen(true)}
+                    onAcceptLead={() => {}} 
+                    onDeleteLead={executeDeleteLead}
+                    sources={sources}
+                    selectedSource={selectedSource}
+                    onSourceChange={setSelectedSource}
+                    onCustomizeStatuses={() => { setStatusModalType('sales'); setIsStatusModalOpen(true); }}
+                    selectedSale={selectedSaleFilter}
+                    onSaleChange={setSelectedSaleFilter}
+                />
+               ) : (
+                   <LeadList 
+                        leads={leads} 
+                        sales={sales} 
+                        onSelectLead={setSelectedLead} 
+                        sources={sources}
+                        selectedSource={selectedSource}
+                        onSourceChange={setSelectedSource}
+                        onDeleteLead={executeDeleteLead}
+                   />
+               )
+            )}
+
+            {activeView === 'cskh' && (
+                <CskhView 
+                    cskhItems={cskhItems}
+                    statuses={cskhStatuses}
+                    onUpdateCskhStatus={handleUpdateCskhStatus}
+                    onCustomizeStatuses={() => { setStatusModalType('cskh'); setIsStatusModalOpen(true); }}
+                    onSelectCskh={setSelectedCskh}
+                    onDeleteCskh={setDeleteCskhTarget}
+                />
+            )}
+
+            {activeView === 're_exam' && (
+                <ReExaminationView 
+                    reExaminations={reExaminations}
+                    sales={sales}
+                    onUpdateStatus={handleUpdateReExamStatus}
+                    onConvertToLead={handleConvertReExamToLead}
+                    onAddReExam={() => setIsAddReExamModalOpen(true)}
+                    onSelectReExam={setSelectedReExam}
+                    onDeleteReExam={setDeleteReExamTarget}
+                />
+            )}
+
+            {activeView === 'customers' && (
+                <CustomerList 
+                    customers={customers}
+                    onSelectCustomer={(c) => { setSelectedCustomer(c); }}
+                    onAddCustomer={() => { setCustomerToEdit(null); setIsCustomerFormOpen(true); }}
+                    sources={sources}
+                    sales={sales}
+                />
+            )}
+
+            {activeView === 'orders' && (
+                <OrderList 
+                    orders={orders}
+                    customers={customers.reduce((acc, c) => ({...acc, [c.phone]: c}), {})}
+                    sales={sales}
+                    onAddOrder={() => setIsAddOrderModalOpen(true)}
+                    onImportOrders={() => setIsImportOrderModalOpen(true)}
+                    onDeleteOrder={handleDeleteOrder}
+                    canImport={true}
+                />
+            )}
+            
+            {activeView === 'revenue' && (
+                 <CalendarView 
+                    leads={leads} 
+                    reExaminations={reExaminations}
+                    onSelectLead={setSelectedLead} 
+                 />
+            )}
+            
+            {activeView === 'settings' && (
+                <SettingsView 
+                    sources={sources}
+                    relationships={relationships}
+                    customerGroups={customerGroups}
+                    roles={roles}
+                    onUpdateSources={setSources}
+                    onUpdateRelationships={setRelationships}
+                    onUpdateCustomerGroups={setCustomerGroups}
+                    onUpdateRoles={setRoles}
+                    useLocalOnly={useLocalOnly}
+                    sales={sales}
+                    onRefresh={() => fetchData(true)}
+                    isAdmin={userProfile?.role === 'admin'}
+                />
+            )}
         </main>
       </div>
 
-      {isAddModalOpen && <AddLeadModal sales={sales} customers={customers} sources={sources} onClose={() => setIsAddModalOpen(false)} onSave={async (data) => {
-          if (useLocalOnly) {
-              const newLead = { 
-                  id: `lead_${Date.now()}`, name: data.name, phone: data.phone, source: data.source,
-                  assignedTo: data.assignedTo, status: data.status, service: data.service,
-                  description: data.description, priority: data.priority, potentialRevenue: data.potentialRevenue,
-                  appointmentDate: data.appointmentDate, projectedAppointmentDate: data.projectedAppointmentDate,
-                  notes: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-              };
-              const customersUpdate = { ...customersData };
-              if (!customersUpdate[data.phone]) {
-                  customersUpdate[data.phone] = { phone: data.phone, name: data.name, source: data.source, generalNotes: '', tags: [] };
-                  setCustomersData(customersUpdate); setLocalCustomers(customersUpdate);
-              }
-              setLeads([newLead, ...leads]); setLocalLeads([newLead, ...leads]); setIsAddModalOpen(false);
-          } else {
-              const customerPayload = mapAppCustomerDataToDbCustomer({ phone: data.phone, name: data.name, source: data.source });
-              await supabase.from('customers').upsert(customerPayload, { onConflict: 'phone' });
-              const { error } = await supabase.from('leads').insert([{ 
-                  id: `lead_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-                  name: data.name, phone: data.phone, source: data.source, assigned_to: data.assignedTo, status: data.status,
-                  service: data.service, description: data.description, potential_revenue: data.potentialRevenue,
-                  projected_appointment_date: data.projectedAppointmentDate, appointment_date: data.appointmentDate,
-                  priority: data.priority // Include priority
-              }]);
-              if (!error) setIsAddModalOpen(false); else alert(formatErrorMessage(error));
-          }
-      }} />}
-      
-      {selectedLead && (
-        <LeadDetailModal 
-            lead={selectedLead} sales={sales} statuses={statuses} cskhStatuses={cskhStatuses} 
-            context={activeView === 'cskh' ? 'cskh' : 'sales'} onClose={() => setSelectedLead(null)} 
-            onSave={async (updatedLead) => {
-                if (updatedLead.status === 'completed' && selectedLead.status !== 'completed') { setLeadToComplete(updatedLead); return; }
-                if (useLocalOnly) {
-                    const newLeads = leads.map(l => l.id === updatedLead.id ? updatedLead : l);
-                    setLeads(newLeads); setLocalLeads(newLeads); 
-                    
-                    // Update CSKH item if changed
-                    if (activeView === 'cskh') {
-                        const updatedCskh = cskhItems.map(item => 
-                            item.originalLeadId === updatedLead.id 
-                            ? {
-                                ...item, 
-                                doctorName: updatedLead.doctorName, 
-                                status: updatedLead.cskhStatus || item.status
-                              } 
-                            : item
-                        );
-                        setCskhItems(updatedCskh); setLocalCskh(updatedCskh);
-                    }
-                    setSelectedLead(null);
-                } else {
-                    await supabase.from('leads').update({
-                         status: updatedLead.status, cskh_status: updatedLead.cskhStatus, assigned_to: updatedLead.assignedTo,
-                         potential_revenue: updatedLead.potentialRevenue, service: updatedLead.service,
-                         description: updatedLead.description, appointment_date: updatedLead.appointmentDate,
-                         projected_appointment_date: updatedLead.projectedAppointmentDate, updated_at: new Date().toISOString(),
-                         priority: updatedLead.priority
-                    }).eq('id', updatedLead.id);
-                    
-                    if (updatedLead.notes.length > (selectedLead.notes || []).length) {
-                        const newNote = updatedLead.notes[0];
-                         await supabase.from('notes').insert([{ id: newNote.id, lead_id: updatedLead.id, content: newNote.content, created_by: currentUser }]);
-                    }
-
-                    // Update Doctor Name AND Status in CSKH table if context is CSKH
-                    if (activeView === 'cskh') {
-                        const updatePayload: any = {};
-                        if (updatedLead.doctorName !== selectedLead.doctorName) {
-                            updatePayload.doctor_name = updatedLead.doctorName;
-                        }
-                        // Also sync status back to CSKH table if changed in modal
-                        if (updatedLead.cskhStatus && updatedLead.cskhStatus !== selectedLead.cskhStatus) {
-                            updatePayload.status = updatedLead.cskhStatus;
-                        }
-
-                        if (Object.keys(updatePayload).length > 0) {
-                            await supabase.from('cskh').update(updatePayload).eq('original_lead_id', updatedLead.id);
-                        }
-                    }
-
-                    setSelectedLead(null);
-                }
-            }}
-            onDelete={activeView === 'cskh' ? (hasPermission('lead.delete') ? () => { const item = cskhItems.find(i => i.originalLeadId === selectedLead.id) || cskhItems.find(i => `ghost_${i.id}` === selectedLead.id); if (item) handleDeleteCskh(item.id); else handleDeleteLead(selectedLead.id); } : undefined) : (hasPermission('lead.delete') ? () => handleDeleteLead(selectedLead.id) : undefined)}
-            currentUser={currentUser} 
-        />
+      {selectedCustomer && (
+          <div className="fixed inset-0 z-50 bg-white overflow-hidden animate-fade-in">
+              <CustomerDetailView 
+                  customer={selectedCustomer}
+                  sales={sales}
+                  statuses={statuses}
+                  cskhItems={cskhItems.filter(c => c.customerPhone === selectedCustomer.phone)}
+                  onClose={() => setSelectedCustomer(null)}
+                  onSelectLead={(lead) => {
+                      setSelectedCustomer(null);
+                      setSelectedLead(lead);
+                  }}
+                  onUpdateCustomer={handleUpdateCustomer}
+                  onEdit={(c) => {
+                      setCustomerToEdit(c);
+                      setIsCustomerFormOpen(true);
+                  }}
+                  onDelete={handleDeleteCustomer}
+                  onAddNote={handleAddNoteToLead}
+                  currentUser={currentUser}
+                  isAdmin={userProfile?.role === 'admin'}
+                  onAddReExam={() => {
+                      setReExamInitialCustomer(selectedCustomer);
+                      setIsAddReExamModalOpen(true);
+                  }}
+              />
+          </div>
       )}
 
-      {/* Render Lead Completion Popup */}
-      {leadToComplete && (
-          <CompleteLeadModal 
-              lead={leadToComplete} 
-              onClose={() => setLeadToComplete(null)} 
-              onConfirm={executeLeadCompletion} 
+      {/* Custom Confirmation Modal for Re-examination Deletion */}
+      {deleteReExamTarget && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-2">Xác nhận xóa lịch tái khám</h3>
+                  <p className="text-slate-600 mb-6">Bạn có chắc chắn muốn xóa lịch hẹn tái khám này không? Hành động này không thể hoàn tác.</p>
+                  <div className="flex justify-end space-x-3">
+                      <button 
+                          onClick={() => setDeleteReExamTarget(null)}
+                          className="px-4 py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 font-medium"
+                      >
+                          Hủy
+                      </button>
+                      <button 
+                          onClick={() => {
+                              executeDeleteReExam(deleteReExamTarget, false);
+                              setDeleteReExamTarget(null);
+                          }}
+                          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-bold"
+                      >
+                          Xác nhận xóa
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {selectedReExam && (
+          <ReExaminationDetailModal 
+              reExam={selectedReExam}
+              sales={sales}
+              onClose={() => setSelectedReExam(null)}
+              onSave={handleUpdateReExam}
+              onDelete={() => setDeleteReExamTarget(selectedReExam.id)}
           />
       )}
 
-      {isCustomerModalOpen && <CustomerFormModal customerToEdit={editingCustomer} relationships={relationships} customerGroups={customerGroups} onClose={() => setIsCustomerModalOpen(false)} onSave={async (data) => {
-          const dbData = mapAppCustomerDataToDbCustomer(data);
-          const { error } = await supabase.from('customers').upsert(dbData, { onConflict: 'phone' });
-          if(error) alert(formatErrorMessage(error)); else setIsCustomerModalOpen(false);
-      }} />}
-      
-      {isAddOrderModalOpen && <AddOrderModal sales={sales} customers={customers} onClose={() => setIsAddOrderModalOpen(false)} onSave={async (data) => {
-          if (useLocalOnly) { setIsAddOrderModalOpen(false); } else {
-              if (data.customerName) {
-                  const customerPayload = mapAppCustomerDataToDbCustomer({ phone: data.customerPhone, name: data.customerName, source: 'manual' });
-                  await supabase.from('customers').upsert(customerPayload, { onConflict: 'phone' });
-              }
-              const { error } = await supabase.from('orders').insert([{ customer_phone: data.customerPhone, service: data.service, revenue: data.revenue, assigned_to: data.assignedTo || null, status: data.status, source: data.source }]);
-              if (error) alert(formatErrorMessage(error)); else setIsAddOrderModalOpen(false);
-          }
-      }} />}
+      {/* Custom Confirmation Modal for CSKH Deletion */}
+      {deleteCskhTarget && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-2">Xác nhận xóa</h3>
+                  <p className="text-slate-600 mb-6">Bạn có chắc chắn muốn xóa mục CSKH này không? Hành động này không thể hoàn tác.</p>
+                  <div className="flex justify-end space-x-3">
+                      <button 
+                          onClick={() => setDeleteCskhTarget(null)}
+                          className="px-4 py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 font-medium"
+                      >
+                          Hủy
+                      </button>
+                      <button 
+                          onClick={() => {
+                              executeDeleteCskh(deleteCskhTarget, false);
+                              setDeleteCskhTarget(null);
+                          }}
+                          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-bold"
+                      >
+                          Xác nhận xóa
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
-      {isImportOrderModalOpen && <ImportOrderModal existingOrders={orders} onClose={() => setIsImportOrderModalOpen(false)} onImport={async (importedData) => {
-           if (useLocalOnly) { alert("Chức năng Import chưa hỗ trợ chế độ Offline."); setIsImportOrderModalOpen(false); } else {
-               setIsImportOrderModalOpen(false); setIsRefreshing(true);
-               try {
-                   const uniqueCustomers = new Map();
-                   importedData.forEach(o => { if(o.customerPhone && o.customerName) { uniqueCustomers.set(o.customerPhone, { phone: o.customerPhone, name: o.customerName, source: o.source || 'import', relationshipStatus: 'Chốt đơn' }); } });
-                   if (uniqueCustomers.size > 0) {
-                       const customersToUpsert = Array.from(uniqueCustomers.values()).map(c => mapAppCustomerDataToDbCustomer(c));
-                       await supabase.from('customers').upsert(customersToUpsert, { onConflict: 'phone' });
-                   }
-                   const dbOrders = importedData.map(o => ({ external_id: o.externalId, customer_phone: o.customerPhone, service: o.service, revenue: o.revenue, status: o.status, source: o.source, created_at: o.createdAt }));
-                   await supabase.from('orders').insert(dbOrders);
-               } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
-           }
-      }} />}
+      {selectedCskh && (
+          <CskhDetailModal 
+              item={selectedCskh}
+              sales={sales}
+              statuses={cskhStatuses}
+              onClose={() => setSelectedCskh(null)}
+              onSave={handleUpdateCskhItem}
+              onViewCustomer={(phone) => {
+                  setSelectedCskh(null);
+                  const customer = customers.find(c => c.phone === phone);
+                  if (customer) setSelectedCustomer(customer);
+                  else alert("Không tìm thấy thông tin khách hàng này.");
+              }}
+              onDelete={() => setDeleteCskhTarget(selectedCskh.id)}
+          />
+      )}
+
+      {/* Modals */}
+      {isCustomerFormOpen && (
+          <CustomerFormModal 
+              customerToEdit={customerToEdit}
+              onClose={() => setIsCustomerFormOpen(false)}
+              onSave={(data) => {
+                  if (customerToEdit) {
+                      handleUpdateCustomer(customerToEdit.phone, data);
+                  } else {
+                      handleAddCustomer(data);
+                  }
+                  setIsCustomerFormOpen(false);
+              }}
+          />
+      )}
+
+      {isAddLeadModalOpen && (
+          <AddLeadModal 
+             sales={sales}
+             customers={customers}
+             sources={sources}
+             onClose={() => setIsAddLeadModalOpen(false)}
+             onSave={handleAddLead}
+          />
+      )}
+
+      {isAddOrderModalOpen && (
+          <AddOrderModal 
+              customers={customers}
+              sales={sales}
+              onClose={() => setIsAddOrderModalOpen(false)}
+              onSave={handleAddOrder}
+          />
+      )}
+
+      {isAddReExamModalOpen && (
+          <AddReExaminationModal 
+              customers={customers}
+              sales={sales}
+              onClose={() => {
+                  setIsAddReExamModalOpen(false);
+                  setReExamInitialCustomer(undefined);
+              }}
+              onSave={handleAddReExamination}
+              initialCustomer={reExamInitialCustomer}
+          />
+      )}
+
+      {isImportOrderModalOpen && (
+          <ImportOrderModal 
+              existingOrders={orders}
+              onClose={() => setIsImportOrderModalOpen(false)}
+              onImport={handleImportOrders}
+          />
+      )}
+      
+      {selectedLead && (
+          <LeadDetailModal 
+              lead={selectedLead}
+              sales={sales}
+              statuses={statuses}
+              cskhStatuses={cskhStatuses}
+              onClose={() => setSelectedLead(null)}
+              onSave={handleUpdateLead}
+              currentUser={currentUser}
+              onDelete={() => executeDeleteLead(selectedLead.id)}
+          />
+      )}
+
+      {leadToComplete && (
+          <CompleteLeadModal 
+              lead={leadToComplete}
+              onClose={() => setLeadToComplete(null)}
+              onConfirm={executeLeadCompletion}
+          />
+      )}
+      
+      {isStatusModalOpen && (
+          <StatusManagementModal 
+              statuses={statusModalType === 'sales' ? statuses : cskhStatuses}
+              leads={leads}
+              onClose={() => setIsStatusModalOpen(false)}
+              onSave={(newStatuses) => {
+                  if (statusModalType === 'sales') setStatuses(newStatuses);
+                  else setCskhStatuses(newStatuses);
+                  setIsStatusModalOpen(false);
+              }}
+              statusKey={statusModalType === 'sales' ? 'status' : 'cskhStatus'}
+          />
+      )}
+
+      <ConfirmationModal 
+          isOpen={confirmModal.isOpen}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={confirmModal.onConfirm}
+          onClose={closeConfirmModal}
+          isDangerous={confirmModal.isDangerous}
+      />
+
     </div>
   );
 }

@@ -16,7 +16,10 @@ interface AddressUnit {
     full_name: string;
 }
 
-const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, relationships = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy'], customerGroups = ['VIP', 'Thân thiết', 'Tiềm năng', 'Vãng lai'], onClose, onSave }) => {
+const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy'];
+const DEFAULT_CUSTOMER_GROUPS = ['VIP', 'Thân thiết', 'Tiềm năng', 'Vãng lai'];
+
+const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, relationships = DEFAULT_RELATIONSHIPS, customerGroups = DEFAULT_CUSTOMER_GROUPS, onClose, onSave }) => {
   const [formData, setFormData] = useState<CustomerData>({
     name: '',
     phone: '',
@@ -205,7 +208,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
         isInitializedRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerToEdit, isEditMode, relationships]);
+  }, [customerToEdit, isEditMode]);
 
 
   // --- Event Handlers ---

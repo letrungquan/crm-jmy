@@ -68,6 +68,7 @@ export interface Lead {
   priority: number | null;
   potentialRevenue: number | null;
   doctorName?: string; // Added field for Doctor mapping in CSKH view
+  reExaminationDate?: string | null; // Added for Re-examination Schedule
 }
 
 export interface CskhItem {
@@ -81,6 +82,22 @@ export interface CskhItem {
   createdAt: string;
   updatedAt: string;
   doctorName?: string; // Added field for Doctor
+  reExaminationDate?: string | null; // Added for Re-examination Schedule
+}
+
+export interface ReExamination {
+  id: string;
+  customerPhone: string;
+  customerName: string;
+  date: string; // Ngày hẹn tái khám YYYY-MM-DD
+  appointmentTime?: string; // Giờ hẹn HH:mm
+  service: string; // Dịch vụ cũ hoặc dự kiến làm
+  doctorName?: string;
+  assignedTo?: string; // Sale phụ trách
+  note?: string;
+  status: 'pending' | 'called' | 'completed' | 'cancelled' | 'converted'; // pending=Cần gọi, called=Đã gọi, completed=Hoàn thành
+  createdAt: string;
+  potentialRevenue?: number; // Doanh thu dự kiến
 }
 
 export interface Order {
@@ -173,4 +190,13 @@ export interface Customer {
     submittedAt?: string;
 }
 
-export type AppView = 'dashboard' | 'sales' | 'cskh' | 'customers' | 'orders' | 'revenue' | 'hr' | 'settings';
+export interface Activity {
+  id: string;
+  type: 'lead' | 'cskh' | 'order' | 're_exam' | 'customer';
+  icon: string;
+  message: string;
+  time: string;
+  user?: string;
+}
+
+export type AppView = 'dashboard' | 'sales' | 'cskh' | 're_exam' | 'customers' | 'orders' | 'revenue' | 'hr' | 'settings';

@@ -84,6 +84,9 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
       // value is "YYYY-MM-DD", convert to ISO string. 
       // Use 12:00:00 instead of 00:00:00 to prevent timezone shifting issues when viewing on calendar
       setCurrentLead(prev => ({ ...prev, [name]: value ? `${value}T12:00:00` : null}));
+    } else if (name === 'reExaminationDate') {
+      // Handle re-examination date
+      setCurrentLead(prev => ({ ...prev, [name]: value ? `${value}T12:00:00` : null}));
     } else {
       setCurrentLead(prev => ({...prev, [name]: value}));
     }
@@ -104,6 +107,16 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
     
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
+
+  // Helper to format date for date-only input (YYYY-MM-DD)
+  const formatForDateInput = (dateString: string | null) => {
+      if (!dateString) return '';
+      try {
+          return dateString.split('T')[0];
+      } catch {
+          return '';
+      }
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4 animate-fade-in">
@@ -141,7 +154,30 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
                     {DOCTORS.map(dr => <option key={dr} value={dr}>{dr}</option>)}
                 </select>
               </div>
+              
+              {/* New Re-examination Date Field */}
               <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1">Ngày hẹn tái khám</label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      name="reExaminationDate"
+                      value={formatForDateInput(currentLead.reExaminationDate || null)}
+                      onChange={handleInputChange}
+                      onClick={(e) => {
+                        try { (e.target as any).showPicker?.(); } catch (err) {}
+                      }}
+                      className="w-full pl-3 pr-10 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 cursor-pointer font-medium"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                  </div>
+              </div>
+
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-600 mb-1">Dịch vụ tư vấn</label>
                  <p className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-slate-700 h-10 flex items-center truncate">
                   {currentLead.service}

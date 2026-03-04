@@ -1,9 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
-import { Lead } from '../types';
+import { Lead, ReExamination } from '../types';
 
 interface CalendarViewProps {
   leads: Lead[];
+  reExaminations?: ReExamination[];
   onSelectLead: (lead: Lead) => void;
 }
 
@@ -44,12 +45,10 @@ const getLeadDate = (lead: Lead): Date | null => {
     if (!dateStr) return null;
     
     // If it's a projected date (date-only or T12:00:00), parse explicitly to local noon
-    // This prevents timezone shifts (e.g., UTC midnight becoming previous day)
     if (isProjected) {
         try {
             const parts = dateStr.split('T');
             const [y, m, d] = parts[0].split('-').map(Number);
-            // Use local time noon
             return new Date(y, m - 1, d, 12, 0, 0);
         } catch (e) {
             return new Date(dateStr);
@@ -59,41 +58,73 @@ const getLeadDate = (lead: Lead): Date | null => {
     return new Date(dateStr);
 };
 
+const getReExamDate = (reExam: ReExamination): Date | null => {
+    if (!reExam.date) return null;
+    try {
+        const parts = reExam.date.split('T');
+        const [y, m, d] = parts[0].split('-').map(Number);
+        return new Date(y, m - 1, d, 12, 0, 0);
+    } catch (e) {
+        return new Date(reExam.date);
+    }
+};
 
-const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
+
+const CalendarView: React.FC<CalendarViewProps> = ({ leads, reExaminations = [], onSelectLead }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
 
   // --- Memos for Data Calculation ---
-  const monthLeads = useMemo(() => {
-    if (viewMode !== 'month') return [];
-    return leads.filter(lead => {
+  const monthItems = useMemo(() => {
+    if (viewMode !== 'month') return { leads: [], reExams: [] };
+    
+    const filteredLeads = leads.filter(lead => {
         const leadDate = getLeadDate(lead);
         if (!leadDate || !lead.potentialRevenue) return false;
         return leadDate.getFullYear() === currentDate.getFullYear() &&
                leadDate.getMonth() === currentDate.getMonth();
     });
-  }, [leads, currentDate, viewMode]);
+
+    const filteredReExams = reExaminations.filter(reExam => {
+        const reExamDate = getReExamDate(reExam);
+        if (!reExamDate || !reExam.potentialRevenue) return false;
+        // Only include pending or called re-exams for forecast
+        if (!['pending', 'called'].includes(reExam.status)) return false;
+        return reExamDate.getFullYear() === currentDate.getFullYear() &&
+               reExamDate.getMonth() === currentDate.getMonth();
+    });
+
+    return { leads: filteredLeads, reExams: filteredReExams };
+  }, [leads, reExaminations, currentDate, viewMode]);
 
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
 
-  const weekLeads = useMemo(() => {
-    if (viewMode !== 'week') return [];
+  const weekItems = useMemo(() => {
+    if (viewMode !== 'week') return { leads: [], reExams: [] };
     const start = weekDays[0];
     const end = weekDays[6];
     start.setHours(0,0,0,0);
     end.setHours(23,59,59,999);
 
-    return leads.filter(lead => {
+    const filteredLeads = leads.filter(lead => {
         const date = getLeadDate(lead);
         if (!date || !lead.potentialRevenue) return false;
         return date >= start && date <= end;
     });
-  }, [leads, weekDays, viewMode]);
+
+    const filteredReExams = reExaminations.filter(reExam => {
+        const date = getReExamDate(reExam);
+        if (!date || !reExam.potentialRevenue) return false;
+        if (!['pending', 'called'].includes(reExam.status)) return false;
+        return date >= start && date <= end;
+    });
+
+    return { leads: filteredLeads, reExams: filteredReExams };
+  }, [leads, reExaminations, weekDays, viewMode]);
 
 
-  const { totalRevenue, scheduledRevenue, contactingRevenue } = useMemo(() => {
-      const relevantLeads = viewMode === 'month' ? monthLeads : weekLeads;
+  const { totalRevenue, scheduledRevenue, contactingRevenue, reExamRevenue } = useMemo(() => {
+      const { leads: relevantLeads, reExams: relevantReExams } = viewMode === 'month' ? monthItems : weekItems;
       
       const scheduled = relevantLeads
         .filter(l => ['scheduled', 'completed'].includes(l.status))
@@ -102,10 +133,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
       const contacting = relevantLeads
         .filter(l => l.status === 'contacting')
         .reduce((total, lead) => total + (lead.potentialRevenue || 0), 0);
+        
+      const reExam = relevantReExams
+        .reduce((total, item) => total + (item.potentialRevenue || 0), 0);
 
-      return { totalRevenue: scheduled + contacting, scheduledRevenue: scheduled, contactingRevenue: contacting };
+      return { 
+          totalRevenue: scheduled + contacting + reExam, 
+          scheduledRevenue: scheduled, 
+          contactingRevenue: contacting,
+          reExamRevenue: reExam
+      };
 
-  }, [monthLeads, weekLeads, viewMode]);
+  }, [monthItems, weekItems, viewMode]);
 
   // --- Helper Functions ---
   const formatCurrency = (value: number) => {
@@ -148,13 +187,20 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
     const daysOfWeek = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const today = new Date();
     
-    const getLeadsForDay = (day: number) => {
-        const dailyLeads = monthLeads.filter(lead => {
+    const getItemsForDay = (day: number) => {
+        const dailyLeads = monthItems.leads.filter(lead => {
             const leadDate = getLeadDate(lead);
             return leadDate ? leadDate.getDate() === day : false;
         });
-        const dailyRevenue = dailyLeads.reduce((total, lead) => total + (lead.potentialRevenue || 0), 0);
-        return { dailyLeads, dailyRevenue };
+        const dailyReExams = monthItems.reExams.filter(reExam => {
+            const reExamDate = getReExamDate(reExam);
+            return reExamDate ? reExamDate.getDate() === day : false;
+        });
+        
+        const dailyRevenue = dailyLeads.reduce((total, lead) => total + (lead.potentialRevenue || 0), 0) +
+                             dailyReExams.reduce((total, item) => total + (item.potentialRevenue || 0), 0);
+                             
+        return { dailyLeads, dailyReExams, dailyRevenue };
     };
 
     return (
@@ -169,7 +215,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
             ))}
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
-              const { dailyLeads, dailyRevenue } = getLeadsForDay(day);
+              const { dailyLeads, dailyReExams, dailyRevenue } = getItemsForDay(day);
               const isToday = today.getFullYear() === currentDate.getFullYear() && today.getMonth() === currentDate.getMonth() && today.getDate() === day;
               return (
                 <div key={day} className="p-1 sm:p-2 bg-white min-h-[120px] sm:min-h-[140px] flex flex-col transition-colors hover:bg-slate-50">
@@ -200,6 +246,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
                         <p className="hidden sm:block truncate">{formatCurrency(lead.potentialRevenue!)}</p>
                       </div>
                     )})}
+                    {dailyReExams.map(reExam => (
+                        <div 
+                            key={reExam.id}
+                            className="p-1 sm:p-1.5 text-xs bg-purple-100 text-purple-800 rounded-md border border-purple-200"
+                            title={`Tái khám: ${reExam.customerName} - ${formatCurrency(reExam.potentialRevenue!)}`}
+                        >
+                            <p className="font-semibold truncate">TK: {reExam.customerName}</p>
+                            <p className="hidden sm:block truncate">{formatCurrency(reExam.potentialRevenue!)}</p>
+                        </div>
+                    ))}
                   </div>
                 </div>
               );
@@ -212,8 +268,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
   const renderWeekView = () => {
     const daysOfWeek = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 
-    const getLeadsForDay = (date: Date) => {
-        const dailyLeads = weekLeads
+    const getItemsForDay = (date: Date) => {
+        const dailyLeads = weekItems.leads
             .filter(lead => {
                 const leadDate = getLeadDate(lead);
                 return leadDate ? leadDate.toDateString() === date.toDateString() : false;
@@ -224,14 +280,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
                 return aTime - bTime;
             });
 
-        const dailyRevenue = dailyLeads.reduce((total, lead) => total + (lead.potentialRevenue || 0), 0);
-        return { dailyLeads, dailyRevenue };
+        const dailyReExams = weekItems.reExams
+            .filter(reExam => {
+                const reExamDate = getReExamDate(reExam);
+                return reExamDate ? reExamDate.toDateString() === date.toDateString() : false;
+            });
+
+        const dailyRevenue = dailyLeads.reduce((total, lead) => total + (lead.potentialRevenue || 0), 0) +
+                             dailyReExams.reduce((total, item) => total + (item.potentialRevenue || 0), 0);
+                             
+        return { dailyLeads, dailyReExams, dailyRevenue };
     }
     
     return (
         <div className="space-y-4">
             {weekDays.map(day => {
-                const { dailyLeads, dailyRevenue } = getLeadsForDay(day);
+                const { dailyLeads, dailyReExams, dailyRevenue } = getItemsForDay(day);
                 return (
                     <div key={day.toISOString()} className="bg-white p-3 rounded-lg shadow">
                         <div className="flex justify-between items-center mb-3 pb-2 border-b">
@@ -239,30 +303,45 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
                             <span className="text-sm font-bold text-green-700 bg-green-100 px-2 py-1 rounded-md">{formatCurrency(dailyRevenue)}</span>
                         </div>
                         <div className="space-y-2">
-                            {dailyLeads.length > 0 ? dailyLeads.map(lead => {
-                                 const isScheduled = ['scheduled', 'completed'].includes(lead.status);
-                                  const theme = {
-                                      bg: isScheduled ? 'bg-blue-50' : 'bg-orange-50',
-                                      text: isScheduled ? 'text-blue-800' : 'text-orange-800',
-                                      border: isScheduled ? 'border-blue-300' : 'border-orange-300',
-                                      hoverBg: isScheduled ? 'hover:bg-blue-100' : 'hover:bg-orange-100',
-                                      revenueText: isScheduled ? 'text-blue-700' : 'text-orange-700',
-                                  };
-                                return (
-                                    <div key={lead.id} onClick={() => onSelectLead(lead)} className={`p-2.5 text-sm ${theme.bg} ${theme.text} rounded-lg cursor-pointer ${theme.hoverBg} border ${theme.border} flex justify-between items-center`}>
-                                        <div>
-                                            <p className="font-bold truncate">{lead.name}</p>
-                                            <p className="text-xs truncate text-slate-500 mt-0.5">{lead.service}</p>
+                            {dailyLeads.length > 0 || dailyReExams.length > 0 ? (
+                                <>
+                                    {dailyLeads.map(lead => {
+                                        const isScheduled = ['scheduled', 'completed'].includes(lead.status);
+                                        const theme = {
+                                            bg: isScheduled ? 'bg-blue-50' : 'bg-orange-50',
+                                            text: isScheduled ? 'text-blue-800' : 'text-orange-800',
+                                            border: isScheduled ? 'border-blue-300' : 'border-orange-300',
+                                            hoverBg: isScheduled ? 'hover:bg-blue-100' : 'hover:bg-orange-100',
+                                            revenueText: isScheduled ? 'text-blue-700' : 'text-orange-700',
+                                        };
+                                        return (
+                                            <div key={lead.id} onClick={() => onSelectLead(lead)} className={`p-2.5 text-sm ${theme.bg} ${theme.text} rounded-lg cursor-pointer ${theme.hoverBg} border ${theme.border} flex justify-between items-center`}>
+                                                <div>
+                                                    <p className="font-bold truncate">{lead.name}</p>
+                                                    <p className="text-xs truncate text-slate-500 mt-0.5">{lead.service}</p>
+                                                </div>
+                                                <div className="text-right flex-shrink-0 ml-2">
+                                                    <p className={`font-bold ${theme.revenueText}`}>{formatCurrency(lead.potentialRevenue!)}</p>
+                                                    {isScheduled && lead.appointmentDate && 
+                                                        <p className="text-xs font-semibold text-slate-600">{new Date(lead.appointmentDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</p> 
+                                                    }
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                    {dailyReExams.map(reExam => (
+                                        <div key={reExam.id} className="p-2.5 text-sm bg-purple-50 text-purple-800 rounded-lg border border-purple-300 flex justify-between items-center">
+                                            <div>
+                                                <p className="font-bold truncate">Tái khám: {reExam.customerName}</p>
+                                                <p className="text-xs truncate text-slate-500 mt-0.5">{reExam.service}</p>
+                                            </div>
+                                            <div className="text-right flex-shrink-0 ml-2">
+                                                <p className="font-bold text-purple-700">{formatCurrency(reExam.potentialRevenue!)}</p>
+                                            </div>
                                         </div>
-                                        <div className="text-right flex-shrink-0 ml-2">
-                                            <p className={`font-bold ${theme.revenueText}`}>{formatCurrency(lead.potentialRevenue!)}</p>
-                                            {isScheduled && lead.appointmentDate && 
-                                                <p className="text-xs font-semibold text-slate-600">{new Date(lead.appointmentDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</p> 
-                                            }
-                                        </div>
-                                    </div>
-                                )
-                            }) : <p className="text-sm text-slate-400 text-center py-2">Không có lịch hẹn.</p>}
+                                    ))}
+                                </>
+                            ) : <p className="text-sm text-slate-400 text-center py-2">Không có lịch hẹn.</p>}
                         </div>
                     </div>
                 )
@@ -298,6 +377,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, onSelectLead }) => {
                 <span className="text-blue-600">Đã hẹn: {formatCurrency(scheduledRevenue)}</span>
                 <span className="mx-2 text-slate-400">|</span>
                 <span className="text-orange-500">Đang hẹn: {formatCurrency(contactingRevenue)}</span>
+                <span className="mx-2 text-slate-400">|</span>
+                <span className="text-purple-600">Tái khám: {formatCurrency(reExamRevenue)}</span>
             </div>
         </div>
       </header>
