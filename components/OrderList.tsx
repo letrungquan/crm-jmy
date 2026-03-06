@@ -59,7 +59,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
   // 1. Filter & Search
   const filteredOrders = useMemo(() => {
       return orders.filter(order => {
-          const customerName = customers[order.customerPhone]?.name || '';
+          const customerName = customers[order.customerPhone]?.name || order.customerName || '';
           
           const matchesSearch = 
             order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -277,7 +277,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                                         )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-bold text-slate-900">{customer?.name || order.customerPhone}</div>
+                                        <div className="text-sm font-bold text-slate-900">{customer?.name || order.customerName || order.customerPhone}</div>
                                         <div className="text-xs text-slate-500">{order.customerPhone}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 max-w-[150px] truncate" title={order.service}>

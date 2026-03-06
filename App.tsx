@@ -420,6 +420,7 @@ function App() {
                              dateOfBirth: c.date_of_birth,
                              occupation: c.occupation,
                              profileCompleteness: c.profile_completeness,
+                             source: c.source,
                              assignedTo: c.assigned_to || existing.assignedTo
                          });
                      }
@@ -585,6 +586,16 @@ function App() {
       }
 
       try {
+          // 1. Đảm bảo khách hàng tồn tại trước khi tạo đơn (tránh lỗi Foreign Key)
+          const { error: custError } = await supabase.from('customers').upsert({
+              phone: newOrder.customerPhone,
+              name: newOrder.customerName || 'Khách hàng',
+              source: 'manual',
+              relationship_status: 'Chốt đơn'
+          }, { onConflict: 'phone', ignoreDuplicates: true });
+          
+          if (custError) console.warn("Lỗi tạo khách hàng cho đơn:", custError);
+
           const { error } = await supabase.from('orders').insert([{
               customer_phone: newOrder.customerPhone,
               service: newOrder.service,
@@ -594,7 +605,24 @@ function App() {
               assigned_to: newOrder.assignedTo,
               customer_name: newOrder.customerName
           }]);
-          if (error) throw error;
+          
+          if (error) {
+              if (error.message?.includes('customer_name') || error.details?.includes('customer_name')) {
+                  console.warn("Schema cache error, falling back to old schema");
+                  const { error: fallbackError } = await supabase.from('orders').insert([{
+                      customer_phone: newOrder.customerPhone,
+                      service: newOrder.service,
+                      revenue: newOrder.revenue,
+                      created_at: newOrder.createdAt,
+                      status: newOrder.status,
+                      assigned_to: newOrder.assignedTo
+                  }]);
+                  if (fallbackError) throw fallbackError;
+                  alert("Đã tạo đơn hàng! Lưu ý: Database đang thiếu cột 'customer_name'. Vui lòng vào Cài đặt -> Copy mã SQL và chạy trong Supabase để cập nhật.");
+              } else {
+                  throw error;
+              }
+          }
           fetchData(true);
       } catch (err) {
           alert(formatErrorMessage(err));
@@ -631,21 +659,68 @@ function App() {
       } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
   };
 
+  const handleBulkDeleteOrders = (orderIds: string[]) => {
+      if (!hasPermission('order.delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
+      setConfirmModal({
+          isOpen: true,
+          title: 'Xóa nhiều đơn hàng',
+          message: `Bạn có chắc chắn muốn xóa ${orderIds.length} đơn hàng đã chọn không?`,
+          isDangerous: true,
+          onConfirm: () => executeBulkDeleteOrders(orderIds)
+      });
+  };
+
+  const executeBulkDeleteOrders = async (orderIds: string[]) => {
+      closeConfirmModal();
+      setIsRefreshing(true);
+      if (useLocalOnly) {
+          const newOrders = orders.filter(o => !orderIds.includes(o.id));
+          setOrders(newOrders);
+          setLocalOrders(newOrders);
+          setIsRefreshing(false);
+          return;
+      }
+      try {
+          const { error } = await supabase.from('orders').delete().in('id', orderIds);
+          if (error) throw error;
+          setOrders(prev => prev.filter(o => !orderIds.includes(o.id)));
+      } catch (err) { alert(formatErrorMessage(err)); } finally { setIsRefreshing(false); }
+  };
+
   const handleImportOrders = async (newOrders: any[]) => {
+      if (!hasPermission('order.import')) {
+          alert("BẠN KHÔNG CÓ QUYỀN NHẬP ĐƠN HÀNG.");
+          return;
+      }
       setIsImportOrderModalOpen(false);
       setIsRefreshing(true);
+
+      // 0. Cập nhật danh sách nguồn nếu có nguồn mới
+      const currentSources = new Set(sources);
+      let hasNewSource = false;
+      newOrders.forEach(o => {
+          if (o.source && !currentSources.has(o.source)) {
+              currentSources.add(o.source);
+              hasNewSource = true;
+          }
+      });
+      
+      if (hasNewSource) {
+          setSources(Array.from(currentSources));
+      }
 
       const ordersToInsert = newOrders.map(o => ({
           id: `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           customerPhone: o.customerPhone,
           service: o.service,
-          revenue: o.revenue,
+          revenue: isNaN(parseFloat(o.revenue)) ? 0 : parseFloat(o.revenue),
           createdAt: o.createdAt,
           status: o.status,
           assignedTo: currentUser,
           externalId: o.externalId,
           source: o.source || 'import',
-          customerName: o.customerName
+          customerName: o.customerName,
+          dateOfBirth: o.dateOfBirth
       }));
 
       if (useLocalOnly) {
@@ -656,9 +731,58 @@ function App() {
       }
 
       try {
+          // 1. Tự động tạo hồ sơ khách hàng cho các số điện thoại mới để tránh lỗi Foreign Key
+          const uniqueCustomers = new Map();
+          ordersToInsert.forEach(o => {
+              if (o.customerPhone) {
+                  const existing = uniqueCustomers.get(o.customerPhone);
+                  const currentSource = o.source || 'import';
+                  const isDefaultSource = currentSource === 'import' || currentSource === 'KiotViet';
+                  
+                  if (!existing) {
+                      uniqueCustomers.set(o.customerPhone, {
+                          phone: o.customerPhone,
+                          name: o.customerName || 'Khách hàng KiotViet',
+                          source: currentSource,
+                          relationship_status: 'Chốt đơn',
+                          ...(o.dateOfBirth && { date_of_birth: o.dateOfBirth })
+                      });
+                  } else {
+                      let updated = false;
+                      const updates: any = {};
+                      
+                      if (!isDefaultSource && (existing.source === 'import' || existing.source === 'KiotViet')) {
+                          updates.source = currentSource;
+                          updated = true;
+                      }
+                      
+                      if (o.dateOfBirth && !existing.date_of_birth) {
+                          updates.date_of_birth = o.dateOfBirth;
+                          updated = true;
+                      }
+                      
+                      if (updated) {
+                          uniqueCustomers.set(o.customerPhone, {
+                              ...existing,
+                              ...updates
+                          });
+                      }
+                  }
+              }
+          });
+          
+          const customersArray = Array.from(uniqueCustomers.values());
+          if (customersArray.length > 0) {
+              const { error: customerError } = await supabase.from('customers').upsert(customersArray, { onConflict: 'phone' });
+              if (customerError) {
+                  console.warn("Lỗi khi tạo/cập nhật khách hàng từ import:", customerError);
+              }
+          }
+
+          // 2. Thêm đơn hàng
           const { error } = await supabase.from('orders').insert(ordersToInsert.map(o => ({
               customer_phone: o.customerPhone,
-              service: o.service,
+              service: o.service || 'Đơn hàng KiotViet',
               revenue: o.revenue,
               created_at: o.createdAt,
               status: o.status,
@@ -668,7 +792,23 @@ function App() {
               customer_name: o.customerName
           })));
           
-          if (error) throw error;
+          if (error) {
+              if (error.message?.includes('customer_name') || error.details?.includes('customer_name') || error.message?.includes('external_id')) {
+                  console.warn("Schema cache error, falling back to old schema");
+                  const { error: fallbackError } = await supabase.from('orders').insert(ordersToInsert.map(o => ({
+                      customer_phone: o.customerPhone,
+                      service: o.service || 'Đơn hàng KiotViet',
+                      revenue: o.revenue,
+                      created_at: o.createdAt,
+                      status: o.status,
+                      assigned_to: o.assignedTo
+                  })));
+                  if (fallbackError) throw fallbackError;
+                  alert("Đã nhập đơn hàng thành công! Tuy nhiên, database của bạn đang thiếu một số cột mới (customer_name, external_id, source). Vui lòng vào mục Cài đặt -> Copy mã SQL và chạy trong Supabase để cập nhật đầy đủ.");
+              } else {
+                  throw error;
+              }
+          }
           fetchData(true);
       } catch (err) {
           alert(formatErrorMessage(err));
@@ -1098,17 +1238,70 @@ function App() {
   };
 
   const handleDeleteCustomer = async (phone: string) => {
-      if (!window.confirm("Bạn có chắc chắn muốn xóa khách hàng này?")) return;
+      if (!hasPermission('customer.delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
+      setConfirmModal({
+          isOpen: true,
+          title: 'Xóa khách hàng',
+          message: 'Bạn có chắc chắn muốn xóa khách hàng này? Dữ liệu liên quan (cơ hội, đơn hàng) có thể bị ảnh hưởng.',
+          isDangerous: true,
+          onConfirm: () => executeDeleteCustomer(phone)
+      });
+  };
+
+  const executeDeleteCustomer = async (phone: string) => {
+      closeConfirmModal();
+      setIsRefreshing(true);
       
-      setCustomers(prev => prev.filter(c => c.phone !== phone));
-      if (selectedCustomer?.phone === phone) setSelectedCustomer(null);
-      
-      if (useLocalOnly) return;
+      if (useLocalOnly) {
+          setCustomers(prev => prev.filter(c => c.phone !== phone));
+          if (selectedCustomer?.phone === phone) setSelectedCustomer(null);
+          setIsRefreshing(false);
+          return;
+      }
 
       try {
-          await supabase.from('customers').delete().eq('phone', phone);
+          const { error } = await supabase.from('customers').delete().eq('phone', phone);
+          if (error) throw error;
+          setCustomers(prev => prev.filter(c => c.phone !== phone));
+          if (selectedCustomer?.phone === phone) setSelectedCustomer(null);
       } catch (err) {
           alert(formatErrorMessage(err));
+      } finally {
+          setIsRefreshing(false);
+      }
+  };
+
+  const handleBulkDeleteCustomers = (phones: string[]) => {
+      if (!hasPermission('customer.delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
+      setConfirmModal({
+          isOpen: true,
+          title: 'Xóa nhiều khách hàng',
+          message: `Bạn có chắc chắn muốn xóa ${phones.length} khách hàng đã chọn không? Dữ liệu liên quan (cơ hội, đơn hàng) có thể bị ảnh hưởng.`,
+          isDangerous: true,
+          onConfirm: () => executeBulkDeleteCustomers(phones)
+      });
+  };
+
+  const executeBulkDeleteCustomers = async (phones: string[]) => {
+      closeConfirmModal();
+      setIsRefreshing(true);
+      
+      if (useLocalOnly) {
+          setCustomers(prev => prev.filter(c => !phones.includes(c.phone)));
+          if (selectedCustomer && phones.includes(selectedCustomer.phone)) setSelectedCustomer(null);
+          setIsRefreshing(false);
+          return;
+      }
+
+      try {
+          const { error } = await supabase.from('customers').delete().in('phone', phones);
+          if (error) throw error;
+          setCustomers(prev => prev.filter(c => !phones.includes(c.phone)));
+          if (selectedCustomer && phones.includes(selectedCustomer.phone)) setSelectedCustomer(null);
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      } finally {
+          setIsRefreshing(false);
       }
   };
 
@@ -1367,6 +1560,8 @@ function App() {
                     customers={customers}
                     onSelectCustomer={(c) => { setSelectedCustomer(c); }}
                     onAddCustomer={() => { setCustomerToEdit(null); setIsCustomerFormOpen(true); }}
+                    onDeleteCustomer={handleDeleteCustomer}
+                    onBulkDelete={handleBulkDeleteCustomers}
                     sources={sources}
                     sales={sales}
                 />
@@ -1378,8 +1573,15 @@ function App() {
                     customers={customers.reduce((acc, c) => ({...acc, [c.phone]: c}), {})}
                     sales={sales}
                     onAddOrder={() => setIsAddOrderModalOpen(true)}
-                    onImportOrders={() => setIsImportOrderModalOpen(true)}
+                    onImportOrders={() => {
+                        if (!hasPermission('order.import')) {
+                            alert("BẠN KHÔNG CÓ QUYỀN NHẬP ĐƠN HÀNG.");
+                            return;
+                        }
+                        setIsImportOrderModalOpen(true);
+                    }}
                     onDeleteOrder={handleDeleteOrder}
+                    onBulkDelete={handleBulkDeleteOrders}
                     canImport={true}
                 />
             )}
@@ -1418,6 +1620,7 @@ function App() {
                   sales={sales}
                   statuses={statuses}
                   cskhItems={cskhItems.filter(c => c.customerPhone === selectedCustomer.phone)}
+                  sources={sources}
                   onClose={() => setSelectedCustomer(null)}
                   onSelectLead={(lead) => {
                       setSelectedCustomer(null);
@@ -1525,6 +1728,7 @@ function App() {
       {isCustomerFormOpen && (
           <CustomerFormModal 
               customerToEdit={customerToEdit}
+              sources={sources}
               onClose={() => setIsCustomerFormOpen(false)}
               onSave={(data) => {
                   if (customerToEdit) {

@@ -56,7 +56,10 @@ const CustomerList: React.FC<CustomerListProps> = ({
           result = result.filter(c => c.source === filterSource);
       }
       if (filterRelationship !== 'all') {
-          result = result.filter(c => c.relationshipStatus === filterRelationship);
+          result = result.filter(c => {
+              const actualStatus = (!c.relationshipStatus || c.relationshipStatus === 'Mới') && c.orders?.length > 0 ? 'Chốt đơn' : (c.relationshipStatus || 'Mới');
+              return actualStatus === filterRelationship;
+          });
       }
       if (filterGroup !== 'all') {
           result = result.filter(c => c.customerGroup === filterGroup);
@@ -269,8 +272,8 @@ const CustomerList: React.FC<CustomerListProps> = ({
                                         </div>
                                     </td>
                                     <td className="px-4 py-2 whitespace-nowrap">
-                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${customer.relationshipStatus === 'Chốt đơn' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                                            {customer.relationshipStatus || 'Mới'}
+                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${((!customer.relationshipStatus || customer.relationshipStatus === 'Mới') && customer.orders?.length > 0) || customer.relationshipStatus === 'Chốt đơn' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                                            {(!customer.relationshipStatus || customer.relationshipStatus === 'Mới') && customer.orders?.length > 0 ? 'Chốt đơn' : (customer.relationshipStatus || 'Mới')}
                                         </span>
                                     </td>
                                     <td className="px-4 py-2 whitespace-nowrap">

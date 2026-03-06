@@ -8,6 +8,7 @@ interface CustomerDetailViewProps {
   statuses: StatusConfig[];
   cskhItems: CskhItem[];
   relationships?: string[];
+  sources?: string[];
   onClose: () => void;
   onSelectLead: (lead: Lead) => void;
   onUpdateCustomer: (phone: string, data: Partial<CustomerData>) => void;
@@ -51,11 +52,12 @@ const KpiCard: React.FC<{ label: string; value: React.ReactNode; subValue?: stri
 
 const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy'];
 
-const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales, statuses, cskhItems, relationships = DEFAULT_RELATIONSHIPS, onClose, onSelectLead, onUpdateCustomer, onEdit, onDelete, onAddNote, currentUser, isAdmin, onAddReExam }) => {
+const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales, statuses, cskhItems, relationships = DEFAULT_RELATIONSHIPS, sources = [], onClose, onSelectLead, onUpdateCustomer, onEdit, onDelete, onAddNote, currentUser, isAdmin, onAddReExam }) => {
     const [activeTab, setActiveTab] = useState('trao_doi');
     const [newNote, setNewNote] = useState('');
     const [selectedLeadForNote, setSelectedLeadForNote] = useState<string>('');
-    const [relationship, setRelationship] = useState(customer.relationshipStatus || relationships[0]);
+    const [relationship, setRelationship] = useState((!customer.relationshipStatus || customer.relationshipStatus === 'Mới') && customer.orders?.length > 0 ? 'Chốt đơn' : (customer.relationshipStatus || relationships[0]));
+    const [source, setSource] = useState(customer.source || '');
     
     // State cho tab Phản hồi
     const [feedbackRating, setFeedbackRating] = useState(5);
@@ -68,13 +70,20 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
     }, [customer.leads]);
 
     useEffect(() => {
-        setRelationship(customer.relationshipStatus || relationships[0]);
-    }, [customer.relationshipStatus]);
+        setRelationship((!customer.relationshipStatus || customer.relationshipStatus === 'Mới') && customer.orders?.length > 0 ? 'Chốt đơn' : (customer.relationshipStatus || relationships[0]));
+        setSource(customer.source || '');
+    }, [customer.relationshipStatus, customer.orders, customer.source]);
 
     const handleRelationshipChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newStatus = e.target.value;
         setRelationship(newStatus);
         onUpdateCustomer(customer.phone, { relationshipStatus: newStatus });
+    };
+
+    const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newSource = e.target.value;
+        setSource(newSource);
+        onUpdateCustomer(customer.phone, { source: newSource });
     };
 
     const allNotes = useMemo(() => 
@@ -344,7 +353,19 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
 
                          <CollapsibleSection title="Thông tin cá nhân" defaultOpen={true}>
                            <div className="space-y-1 mt-1">
-                                <InfoField label="Nguồn" value={customer.source} />
+                                <div className="flex justify-between text-sm py-1.5 border-b border-slate-50 last:border-0">
+                                    <span className="text-slate-500">Nguồn</span>
+                                    <select 
+                                        value={source} 
+                                        onChange={handleSourceChange} 
+                                        className="font-medium text-slate-700 text-right bg-transparent focus:bg-white focus:ring-1 focus:ring-blue-200 rounded px-1 w-[60%] outline-none cursor-pointer"
+                                    >
+                                        <option value="">Chưa cập nhật</option>
+                                        {sources.map(s => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <InfoField label="Email" value={customer.email} />
                                 <InfoField label="Ngày sinh" value={formatDateOfBirth(customer.dateOfBirth)} />
                                 <InfoField label="Nhóm khách" value={customer.customerGroup} />

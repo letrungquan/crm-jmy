@@ -20,7 +20,8 @@ const ImportOrderModal: React.FC<ImportOrderModalProps> = ({ existingOrders, onC
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const normalizeHeader = (header: string) => {
+  const normalizeHeader = (header: any) => {
+      if (!header) return "";
       return header.toString().toLowerCase().trim()
           .replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a")
           .replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e")
@@ -32,66 +33,129 @@ const ImportOrderModal: React.FC<ImportOrderModalProps> = ({ existingOrders, onC
           .replace(/\s+/g, "_");
   };
 
+  const parseVnNumber = (val: any) => {
+      if (typeof val === 'number') return val;
+      if (!val) return 0;
+      // Xử lý số định dạng VN: 1.000.000 hoặc 1.000.000,00
+      const clean = val.toString().replace(/\./g, '').replace(/,/g, '.');
+      const parsed = parseFloat(clean);
+      return isNaN(parsed) ? 0 : parsed;
+  };
+
   const processExcelData = (data: any[]) => {
       if (!data || data.length === 0) {
           alert("File không có dữ liệu.");
           return;
       }
 
+      // Tìm dòng tiêu đề thực sự nếu file có các dòng trống hoặc tiêu đề báo cáo ở trên
+      let startIndex = 0;
+      const headerKeywords = ['ma_hoa_don', 'ma_chung_tu', 'khach_hang', 'ten_khach_hang', 'dien_thoai'];
+      
+      // Thử tìm dòng chứa các từ khóa tiêu đề
+      for (let i = 0; i < Math.min(data.length, 10); i++) {
+          const rowKeys = Object.keys(data[i]).map(k => normalizeHeader(k));
+          if (rowKeys.some(k => headerKeywords.includes(k))) {
+              startIndex = i;
+              break;
+          }
+      }
+
       const ordersMap = new Map<string, any>();
 
-      data.forEach(row => {
+      for (let i = startIndex; i < data.length; i++) {
+          const row = data[i];
           const normalizedRow: any = {};
           Object.keys(row).forEach(key => {
               normalizedRow[normalizeHeader(key)] = row[key];
           });
 
           // Các key phổ biến trong file xuất KiotViet
-          const maHoaDon = normalizedRow['ma_hoa_don'] || normalizedRow['ma_chung_tu'];
-          if (!maHoaDon) return;
+          const maHoaDonRaw = normalizedRow['ma_hoa_don'] || normalizedRow['ma_chung_tu'];
+          if (!maHoaDonRaw) continue;
+          const maHoaDon = maHoaDonRaw.toString().trim();
 
-          const tenKhachHang = normalizedRow['ten_khach_hang'] || normalizedRow['khach_hang'] || '';
+          const tenKhachHang = (normalizedRow['ten_khach_hang'] || normalizedRow['khach_hang'] || '').toString().trim();
           const dienThoaiRaw = normalizedRow['dien_thoai'] || normalizedRow['so_dien_thoai'] || normalizedRow['sdt'] || '';
           
           // Lọc bỏ những khách không có SĐT
           const cleanPhone = dienThoaiRaw.toString().replace(/[^0-9]/g, '');
           if (!cleanPhone || cleanPhone.length < 8) {
-              return; // Bỏ qua dòng này nếu không có SĐT hợp lệ
+              continue; // Bỏ qua dòng này nếu không có SĐT hợp lệ
           }
           const finalPhone = cleanPhone;
 
-          const tenHang = normalizedRow['ten_hang'] || normalizedRow['hang_hoa'] || normalizedRow['dien_giai'] || '';
+          const tenHang = (normalizedRow['ten_hang'] || normalizedRow['hang_hoa'] || normalizedRow['dien_giai'] || '').toString().trim();
           const thoiGian = normalizedRow['thoi_gian'] || normalizedRow['ngay_ban'] || normalizedRow['ngay_chung_tu'];
-          const trangThai = normalizedRow['trang_thai'];
+          const trangThai = (normalizedRow['trang_thai'] || '').toString().trim();
           
           // Lấy Kênh bán làm Nguồn (Source)
-          // Ưu tiên cột "Kênh bán" chính xác
           let kenhBan = normalizedRow['kenh_ban'];
           if (!kenhBan) {
-              // Tìm kiếm lỏng hơn nếu key không khớp chính xác
               const rawKey = Object.keys(row).find(k => {
                   const norm = normalizeHeader(k);
-                  return norm.includes('kenh_ban') || norm === 'kenh';
+                  return norm.includes('kenh_ban') || norm === 'kenh' || norm === 'nguon' || norm === 'source';
               });
               if (rawKey) kenhBan = row[rawKey];
           }
-          const sourceValue = kenhBan || 'KiotViet';
+          const sourceValue = (kenhBan || 'KiotViet').toString().trim();
 
-          // Logic tính toán doanh thu để tránh nhân đôi/nhân ba khi một hóa đơn có nhiều dòng
-          const lineAmount = parseFloat(normalizedRow['thanh_tien'] || '0');
-          const invoiceTotal = parseFloat(normalizedRow['khach_can_tra'] || normalizedRow['tong_tien_hang'] || '0');
+          // Logic tính toán doanh thu
+          const lineAmount = parseVnNumber(normalizedRow['thanh_tien']);
+          const invoiceTotal = parseVnNumber(normalizedRow['khach_can_tra'] || normalizedRow['tong_tien_hang']);
+
+          // Lấy Ngày sinh
+          let ngaySinh = normalizedRow['ngay_sinh'];
+          let parsedDateOfBirth = undefined;
+          if (ngaySinh) {
+              if (typeof ngaySinh === 'number') {
+                  const date = new Date((ngaySinh - (25567 + 2)) * 86400 * 1000);
+                  if(!isNaN(date.getTime())) parsedDateOfBirth = date.toISOString().split('T')[0];
+              } else {
+                  const parts = ngaySinh.toString().split(/[/\s-]/);
+                  if (parts.length >= 3) {
+                      // Giả định format DD/MM/YYYY
+                      const day = parts[0].padStart(2, '0');
+                      const month = parts[1].padStart(2, '0');
+                      const year = parts[2];
+                      if (year.length === 4) {
+                          parsedDateOfBirth = `${year}-${month}-${day}`;
+                      } else {
+                          // Thử format YYYY-MM-DD
+                          const d2 = new Date(ngaySinh.toString());
+                          if(!isNaN(d2.getTime())) parsedDateOfBirth = d2.toISOString().split('T')[0];
+                      }
+                  }
+              }
+          }
 
           let createdAt = new Date().toISOString();
           if (thoiGian) {
               if (typeof thoiGian === 'number') {
-                   const date = new Date((thoiGian - (25567 + 2)) * 86400 * 1000);
-                   createdAt = date.toISOString();
+                   // Xử lý ngày Excel (serial number)
+                   const utcDate = new Date((thoiGian - (25567 + 2)) * 86400 * 1000);
+                   const date = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), utcDate.getUTCHours(), utcDate.getUTCMinutes(), utcDate.getUTCSeconds());
+                   if(!isNaN(date.getTime())) createdAt = date.toISOString();
               } else {
+                  // Xử lý chuỗi ngày DD/MM/YYYY HH:mm
                   const parts = thoiGian.toString().split(/[/\s:]/);
                   if (parts.length >= 3) {
                        try {
-                           const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T${parts[3]||'00'}:${parts[4]||'00'}:00`);
-                           if(!isNaN(d.getTime())) createdAt = d.toISOString();
+                           // Giả định format DD/MM/YYYY
+                           const year = parseInt(parts[2]);
+                           const month = parseInt(parts[1]) - 1;
+                           const day = parseInt(parts[0]);
+                           const hour = parseInt(parts[3] || '0');
+                           const minute = parseInt(parts[4] || '0');
+                           
+                           if (year > 2000) {
+                               const d = new Date(year, month, day, hour, minute);
+                               if(!isNaN(d.getTime())) createdAt = d.toISOString();
+                           } else {
+                               // Thử format YYYY-MM-DD
+                               const d2 = new Date(thoiGian.toString());
+                               if(!isNaN(d2.getTime())) createdAt = d2.toISOString();
+                           }
                        } catch(e) {}
                   }
               }
@@ -99,29 +163,27 @@ const ImportOrderModal: React.FC<ImportOrderModalProps> = ({ existingOrders, onC
 
           if (ordersMap.has(maHoaDon)) {
               const existingOrder = ordersMap.get(maHoaDon);
-              // Thêm tên hàng nếu chưa có
               if (tenHang && !existingOrder.service.includes(tenHang)) {
                   existingOrder.service += ` , ${tenHang}`;
               }
               
-              // Nếu file có cột 'thanh_tien' (chi tiết hóa đơn), ta cộng dồn tiền từng dòng
               if (normalizedRow['thanh_tien'] !== undefined && normalizedRow['thanh_tien'] !== "") {
                   existingOrder.revenue += lineAmount;
               }
           } else {
-              // Dòng đầu tiên của hóa đơn này
               ordersMap.set(maHoaDon, {
                   externalId: maHoaDon,
                   customerName: tenKhachHang,
                   customerPhone: finalPhone,
-                  service: tenHang,
-                  revenue: (normalizedRow['thanh_tien'] !== undefined && normalizedRow['thanh_tien'] !== "") ? lineAmount : invoiceTotal,
+                  service: tenHang || 'Đơn hàng KiotViet',
+                  revenue: lineAmount > 0 ? lineAmount : invoiceTotal,
                   createdAt: createdAt,
                   status: (trangThai === 'Hoàn thành' || !trangThai) ? 'completed' : (trangThai === 'Đã hủy' ? 'cancelled' : 'pending'),
-                  source: sourceValue
+                  source: sourceValue,
+                  dateOfBirth: parsedDateOfBirth
               });
           }
-      });
+      }
 
       const existingIds = new Set(existingOrders.map(o => o.externalId).filter(Boolean));
       const newOrders: any[] = [];
@@ -152,7 +214,7 @@ const ImportOrderModal: React.FC<ImportOrderModalProps> = ({ existingOrders, onC
       reader.onload = (event) => {
           try {
               const data = event.target?.result;
-              const workbook = XLSX.read(data, { type: 'binary' });
+              const workbook = XLSX.read(data, { type: 'array' });
               const firstSheetName = workbook.SheetNames[0];
               const worksheet = workbook.Sheets[firstSheetName];
               const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
@@ -163,13 +225,13 @@ const ImportOrderModal: React.FC<ImportOrderModalProps> = ({ existingOrders, onC
                   alert('File không có dữ liệu hoặc không đọc được.');
               }
           } catch (err) {
-              alert('Lỗi đọc file Excel.');
+              alert('Lỗi đọc file Excel. Vui lòng kiểm tra định dạng file.');
               console.error(err);
           } finally {
               setIsProcessing(false);
           }
       };
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
   };
 
   return (

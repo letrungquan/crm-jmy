@@ -662,6 +662,11 @@ CREATE TABLE IF NOT EXISTS re_examinations (
   updated_at timestamptz DEFAULT now()
 );
 
+-- Fix missing columns in orders table
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name text;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS external_id text;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source text;
+
 -- Add potential_revenue column if it doesn't exist
 ALTER TABLE re_examinations ADD COLUMN IF NOT EXISTS potential_revenue numeric;
 

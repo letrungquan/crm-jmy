@@ -6,6 +6,7 @@ interface CustomerFormModalProps {
   customerToEdit?: Customer | null;
   relationships?: string[];
   customerGroups?: string[];
+  sources?: string[];
   onClose: () => void;
   onSave: (customerData: CustomerData) => void;
 }
@@ -19,7 +20,7 @@ interface AddressUnit {
 const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy'];
 const DEFAULT_CUSTOMER_GROUPS = ['VIP', 'Thân thiết', 'Tiềm năng', 'Vãng lai'];
 
-const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, relationships = DEFAULT_RELATIONSHIPS, customerGroups = DEFAULT_CUSTOMER_GROUPS, onClose, onSave }) => {
+const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, relationships = DEFAULT_RELATIONSHIPS, customerGroups = DEFAULT_CUSTOMER_GROUPS, sources = [], onClose, onSave }) => {
   const [formData, setFormData] = useState<CustomerData>({
     name: '',
     phone: '',
@@ -432,6 +433,15 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
                       <option value="">-- Chọn nhóm --</option>
                       {customerGroups.map(group => (
                           <option key={group} value={group}>{group}</option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="source" className="block text-sm font-medium text-slate-700">Nguồn khách hàng</label>
+                  <select name="source" id="source" value={formData.source || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                      <option value="">-- Chọn nguồn --</option>
+                      {sources.map(source => (
+                          <option key={source} value={source}>{source}</option>
                       ))}
                   </select>
                 </div>
