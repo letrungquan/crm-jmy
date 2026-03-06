@@ -66,11 +66,11 @@ function App() {
     { id: 'admin', name: 'Quản trị viên', permissions: [], isSystem: true },
     { id: 'sale', name: 'Nhân viên Sale', permissions: [], isSystem: false },
   ]);
-  const [statuses, setStatuses] = useLocalStorage<StatusConfig[]>('statuses', INITIAL_STATUSES);
-  const [cskhStatuses, setCskhStatuses] = useLocalStorage<StatusConfig[]>('cskh_statuses', INITIAL_CSKH_STATUSES);
-  const [sources, setSources] = useLocalStorage<string[]>('sources', ['Facebook', 'Zalo', 'Website', 'Direct', 'Referral']);
-  const [relationships, setRelationships] = useLocalStorage<string[]>('relationships', ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy']);
-  const [customerGroups, setCustomerGroups] = useLocalStorage<string[]>('customer_groups', ['VIP', 'Thân thiết', 'Tiềm năng', 'Vãng lai']);
+  const [statuses, setStatuses] = useState<StatusConfig[]>(INITIAL_STATUSES);
+  const [cskhStatuses, setCskhStatuses] = useState<StatusConfig[]>(INITIAL_CSKH_STATUSES);
+  const [sources, setSources] = useState<string[]>(['Facebook', 'Zalo', 'Website', 'Direct', 'Referral']);
+  const [relationships, setRelationships] = useState<string[]>(['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy']);
+  const [customerGroups, setCustomerGroups] = useState<string[]>(['VIP', 'Thân thiết', 'Tiềm năng', 'Vãng lai']);
 
   // --- Local Storage (Offline Mode) ---
   const [useLocalOnly, setUseLocalOnly] = useState(false);
@@ -199,6 +199,21 @@ function App() {
           .on('postgres_changes', { event: '*', schema: 'public', table: 're_examinations' }, handleNewActivity)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, handleNewActivity)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, handleNewActivity)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+              const newSetting = payload.new as any;
+              if (!newSetting) return;
+              if (newSetting.key === 'sources' && Array.isArray(newSetting.value)) {
+                  setSources(newSetting.value);
+              } else if (newSetting.key === 'relationships' && Array.isArray(newSetting.value)) {
+                  setRelationships(newSetting.value);
+              } else if (newSetting.key === 'customer_groups' && Array.isArray(newSetting.value)) {
+                  setCustomerGroups(newSetting.value);
+              } else if (newSetting.key === 'statuses' && Array.isArray(newSetting.value)) {
+                  setStatuses(newSetting.value);
+              } else if (newSetting.key === 'cskh_statuses' && Array.isArray(newSetting.value)) {
+                  setCskhStatuses(newSetting.value);
+              }
+          })
           .subscribe();
       
       return () => {
@@ -249,7 +264,7 @@ function App() {
         localOrders.forEach(o => {
              if(!customerMap.has(o.customerPhone)) {
                  customerMap.set(o.customerPhone, {
-                     name: o.customerName || 'Khách hàng', phone: o.customerPhone, leads: [], orders: [], generalNotes: '', tags: []
+                     name: o.customerName || 'Khách hàng', phone: o.customerPhone, leads: [], orders: [], generalNotes: '', tags: [], source: o.source, dateOfBirth: o.dateOfBirth
                  });
              }
              customerMap.get(o.customerPhone)?.orders.push(o);
@@ -397,7 +412,9 @@ function App() {
                     orders: [o],
                     generalNotes: '',
                     tags: [],
-                    assignedTo: o.assignedTo || undefined
+                    assignedTo: o.assignedTo || undefined,
+                    source: o.source,
+                    dateOfBirth: o.dateOfBirth
                 });
             }
         });
@@ -427,6 +444,32 @@ function App() {
                 });
             }
         } catch (e) { console.warn("Lỗi fetch chi tiết khách hàng", e); }
+
+        // Fetch Settings
+        try {
+            const { data: settingsData, error } = await supabase.from('app_settings').select('*');
+            if (error) {
+                if (error.code === '42P01') {
+                    alert("LỖI NGHIÊM TRỌNG: Bảng 'app_settings' chưa được tạo trên Supabase!\n\nVui lòng vào mục Cài đặt -> Công cụ sửa lỗi Database và chạy đoạn mã SQL số 9 để tạo bảng. Nếu không, các cài đặt (Nguồn, Mối quan hệ, Nhóm KH) sẽ bị mất khi tải lại trang.");
+                }
+                throw error;
+            }
+            if (settingsData) {
+                settingsData.forEach(setting => {
+                    if (setting.key === 'sources' && Array.isArray(setting.value)) {
+                        setSources(setting.value);
+                    } else if (setting.key === 'relationships' && Array.isArray(setting.value)) {
+                        setRelationships(setting.value);
+                    } else if (setting.key === 'customer_groups' && Array.isArray(setting.value)) {
+                        setCustomerGroups(setting.value);
+                    } else if (setting.key === 'statuses' && Array.isArray(setting.value)) {
+                        setStatuses(setting.value);
+                    } else if (setting.key === 'cskh_statuses' && Array.isArray(setting.value)) {
+                        setCskhStatuses(setting.value);
+                    }
+                });
+            }
+        } catch (e) { console.warn("Lỗi fetch settings", e); }
 
         setCustomers(Array.from(customerMap.values()));
 
@@ -492,6 +535,22 @@ function App() {
   }, []); // Remove fetchData from dependency to avoid loop
 
   // --- Actions (Giữ nguyên logic, thêm check useLocalOnly) ---
+
+  const updateSetting = async (key: string, value: any, setter: React.Dispatch<React.SetStateAction<any>>) => {
+      setter(value);
+      if (useLocalOnly) return;
+      try {
+          const { error } = await supabase.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() });
+          if (error) throw error;
+      } catch (err: any) {
+          console.error(`Lỗi lưu ${key}:`, err);
+          if (err.code === '42P01') {
+              alert(`Lỗi lưu cài đặt ${key}: Bảng 'app_settings' chưa được tạo! Vui lòng vào Cài đặt -> Công cụ sửa lỗi Database và chạy đoạn mã SQL số 9.`);
+          } else {
+              alert(`Lỗi lưu cài đặt ${key}: ${err.message || 'Lỗi không xác định'}`);
+          }
+      }
+  };
 
   const executeDeleteLead = async (leadId: string) => {
     closeConfirmModal();
@@ -706,7 +765,7 @@ function App() {
       });
       
       if (hasNewSource) {
-          setSources(Array.from(currentSources));
+          updateSetting('sources', Array.from(currentSources), setSources);
       }
 
       const ordersToInsert = newOrders.map(o => ({
@@ -735,35 +794,51 @@ function App() {
           const uniqueCustomers = new Map();
           ordersToInsert.forEach(o => {
               if (o.customerPhone) {
-                  const existing = uniqueCustomers.get(o.customerPhone);
+                  const existingInImport = uniqueCustomers.get(o.customerPhone);
+                  const existingInDb = customers.find(c => c.phone === o.customerPhone);
+                  
                   const currentSource = o.source || 'import';
                   const isDefaultSource = currentSource === 'import' || currentSource === 'KiotViet';
                   
-                  if (!existing) {
-                      uniqueCustomers.set(o.customerPhone, {
+                  if (!existingInImport) {
+                      const customerData: any = {
                           phone: o.customerPhone,
-                          name: o.customerName || 'Khách hàng KiotViet',
-                          source: currentSource,
-                          relationship_status: 'Chốt đơn',
-                          ...(o.dateOfBirth && { date_of_birth: o.dateOfBirth })
-                      });
+                          name: o.customerName || existingInDb?.name || 'Khách hàng KiotViet',
+                          relationship_status: existingInDb?.relationshipStatus || 'Chốt đơn',
+                      };
+                      
+                      // Chỉ cập nhật source nếu trong DB chưa có hoặc là nguồn mặc định
+                      if (!existingInDb?.source || existingInDb.source === 'import' || existingInDb.source === 'KiotViet') {
+                          customerData.source = currentSource;
+                      } else {
+                          customerData.source = existingInDb.source;
+                      }
+                      
+                      // Chỉ cập nhật ngày sinh nếu trong DB chưa có
+                      if (o.dateOfBirth && !existingInDb?.dateOfBirth) {
+                          customerData.date_of_birth = o.dateOfBirth;
+                      } else if (existingInDb?.dateOfBirth) {
+                          customerData.date_of_birth = existingInDb.dateOfBirth;
+                      }
+                      
+                      uniqueCustomers.set(o.customerPhone, customerData);
                   } else {
                       let updated = false;
                       const updates: any = {};
                       
-                      if (!isDefaultSource && (existing.source === 'import' || existing.source === 'KiotViet')) {
+                      if (!isDefaultSource && (existingInImport.source === 'import' || existingInImport.source === 'KiotViet')) {
                           updates.source = currentSource;
                           updated = true;
                       }
                       
-                      if (o.dateOfBirth && !existing.date_of_birth) {
+                      if (o.dateOfBirth && !existingInImport.date_of_birth) {
                           updates.date_of_birth = o.dateOfBirth;
                           updated = true;
                       }
                       
                       if (updated) {
                           uniqueCustomers.set(o.customerPhone, {
-                              ...existing,
+                              ...existingInImport,
                               ...updates
                           });
                       }
@@ -1600,9 +1675,9 @@ function App() {
                     relationships={relationships}
                     customerGroups={customerGroups}
                     roles={roles}
-                    onUpdateSources={setSources}
-                    onUpdateRelationships={setRelationships}
-                    onUpdateCustomerGroups={setCustomerGroups}
+                    onUpdateSources={(v) => updateSetting('sources', v, setSources)}
+                    onUpdateRelationships={(v) => updateSetting('relationships', v, setRelationships)}
+                    onUpdateCustomerGroups={(v) => updateSetting('customer_groups', v, setCustomerGroups)}
                     onUpdateRoles={setRoles}
                     useLocalOnly={useLocalOnly}
                     sales={sales}
@@ -1808,8 +1883,11 @@ function App() {
               leads={leads}
               onClose={() => setIsStatusModalOpen(false)}
               onSave={(newStatuses) => {
-                  if (statusModalType === 'sales') setStatuses(newStatuses);
-                  else setCskhStatuses(newStatuses);
+                  if (statusModalType === 'sales') {
+                      updateSetting('statuses', newStatuses, setStatuses);
+                  } else {
+                      updateSetting('cskh_statuses', newStatuses, setCskhStatuses);
+                  }
                   setIsStatusModalOpen(false);
               }}
               statusKey={statusModalType === 'sales' ? 'status' : 'cskhStatus'}

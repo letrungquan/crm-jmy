@@ -643,8 +643,12 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- Fix Missing assigned_to column in customers
+-- Fix Missing columns in customers
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS assigned_to uuid REFERENCES auth.users;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS source text;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS date_of_birth date;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS customer_group text;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS relationship_status text;
 
 -- Create Re-examination table with RLS Policies
 CREATE TABLE IF NOT EXISTS re_examinations (

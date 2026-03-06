@@ -137,23 +137,36 @@ const ImportOrderModal: React.FC<ImportOrderModalProps> = ({ existingOrders, onC
                    const date = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), utcDate.getUTCHours(), utcDate.getUTCMinutes(), utcDate.getUTCSeconds());
                    if(!isNaN(date.getTime())) createdAt = date.toISOString();
               } else {
-                  // Xử lý chuỗi ngày DD/MM/YYYY HH:mm
-                  const parts = thoiGian.toString().split(/[/\s:]/);
+                  // Xử lý chuỗi ngày DD/MM/YYYY HH:mm hoặc YYYY-MM-DD HH:mm
+                  const thoiGianStr = thoiGian.toString().trim();
+                  const parts = thoiGianStr.split(/[/\s:-]/);
                   if (parts.length >= 3) {
                        try {
-                           // Giả định format DD/MM/YYYY
-                           const year = parseInt(parts[2]);
-                           const month = parseInt(parts[1]) - 1;
-                           const day = parseInt(parts[0]);
-                           const hour = parseInt(parts[3] || '0');
-                           const minute = parseInt(parts[4] || '0');
+                           let year, month, day, hour, minute, second;
+                           
+                           // Kiểm tra xem part đầu tiên là năm hay ngày
+                           if (parts[0].length === 4) {
+                               // Format YYYY-MM-DD
+                               year = parseInt(parts[0]);
+                               month = parseInt(parts[1]) - 1;
+                               day = parseInt(parts[2]);
+                           } else {
+                               // Format DD/MM/YYYY
+                               day = parseInt(parts[0]);
+                               month = parseInt(parts[1]) - 1;
+                               year = parseInt(parts[2]);
+                           }
+                           
+                           hour = parseInt(parts[3] || '0');
+                           minute = parseInt(parts[4] || '0');
+                           second = parseInt(parts[5] || '0');
                            
                            if (year > 2000) {
-                               const d = new Date(year, month, day, hour, minute);
+                               const d = new Date(year, month, day, hour, minute, second);
                                if(!isNaN(d.getTime())) createdAt = d.toISOString();
                            } else {
-                               // Thử format YYYY-MM-DD
-                               const d2 = new Date(thoiGian.toString());
+                               // Thử fallback
+                               const d2 = new Date(thoiGianStr.replace(' ', 'T'));
                                if(!isNaN(d2.getTime())) createdAt = d2.toISOString();
                            }
                        } catch(e) {}

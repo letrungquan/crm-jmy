@@ -109,8 +109,9 @@ export interface Order {
   status: 'completed' | 'cancelled' | 'pending';
   assignedTo?: string; // Sale ID
   externalId?: string; // Mã đơn từ KiotViet
-  source?: 'manual' | 'kiotviet' | 'import';
+  source?: string;
   customerName?: string;
+  dateOfBirth?: string;
 }
 
 export interface CustomerData {
