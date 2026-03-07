@@ -1938,7 +1938,7 @@ function AppContent() {
                     }}
                     onDeleteOrder={handleDeleteOrder}
                     onBulkDelete={handleBulkDeleteOrders}
-                    canImport={true}
+                    canImport={hasPermission('orders', 'import')}
                 />
             )}
             

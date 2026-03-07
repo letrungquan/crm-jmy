@@ -80,15 +80,15 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onRefresh: () =
     const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
 
     const permissionGroups = [
-        { label: 'Dashboard', prefix: 'dashboard', actions: ['view'] },
-        { label: 'Cơ hội (Leads)', prefix: 'lead', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'import'] },
-        { label: 'CSKH', prefix: 'cskh', actions: ['view', 'view_all', 'create', 'edit', 'delete'] },
-        { label: 'Tái khám', prefix: 're_exam', actions: ['view', 'view_all', 'create', 'edit', 'delete'] },
-        { label: 'Khách hàng (Customers)', prefix: 'customer', actions: ['view', 'view_all', 'create', 'edit', 'delete'] },
-        { label: 'Đơn hàng (Orders)', prefix: 'order', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'import'] },
-        { label: 'Doanh thu', prefix: 'revenue', actions: ['view', 'view_all'] },
-        { label: 'Nhân sự (HR)', prefix: 'user', actions: ['manage'] },
-        { label: 'Cài đặt', prefix: 'settings', actions: ['access'] },
+        { label: 'Dashboard', prefix: 'reports', actions: ['view'] },
+        { label: 'Cơ hội (Leads)', prefix: 'leads', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'import', 'export'] },
+        { label: 'CSKH', prefix: 'cskh', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'export'] },
+        { label: 'Tái khám', prefix: 'appointments', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'export'] },
+        { label: 'Khách hàng (Customers)', prefix: 'customers', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'export'] },
+        { label: 'Đơn hàng (Orders)', prefix: 'orders', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'import', 'export'] },
+        { label: 'Doanh thu', prefix: 'revenue_schedule', actions: ['view', 'view_all', 'export'] },
+        { label: 'Nhân sự (HR)', prefix: 'staff', actions: ['view', 'manage'] },
+        { label: 'Cài đặt', prefix: 'settings', actions: ['view', 'edit'] },
     ];
 
     const handleAddRole = async () => {
@@ -263,8 +263,8 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onRefresh: () =
                                                 if (action === 'edit') label = 'Chỉnh sửa';
                                                 if (action === 'delete') label = 'Xóa';
                                                 if (action === 'import') label = 'Import Excel';
-                                                if (action === 'access') label = 'Truy cập Cài đặt';
-                                                if (action === 'manage') label = 'Quản lý User';
+                                                if (action === 'export') label = 'Export Excel';
+                                                if (action === 'manage') label = 'Quản lý';
 
                                                 return (
                                                     <label key={permKey} className={`flex items-center space-x-2 text-sm p-2 rounded border ${isChecked ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-100'} ${isDisabled ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-blue-300'}`}>
