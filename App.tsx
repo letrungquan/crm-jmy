@@ -1557,6 +1557,19 @@ function App() {
       }
 
       try {
+          // Xóa các dữ liệu liên quan trước (để tránh lỗi foreign key)
+          await supabase.from('cskh').delete().eq('customer_phone', phone);
+          await supabase.from('orders').delete().eq('customer_phone', phone);
+          await supabase.from('re_examinations').delete().eq('customer_phone', phone);
+
+          const customerLeads = leads.filter(l => l.phone === phone);
+          const leadIds = customerLeads.map(l => l.id);
+          
+          if (leadIds.length > 0) {
+              await supabase.from('notes').delete().in('lead_id', leadIds);
+              await supabase.from('leads').delete().in('id', leadIds);
+          }
+
           const { error } = await supabase.from('customers').delete().eq('phone', phone);
           if (error) throw error;
           setCustomers(prev => prev.filter(c => c.phone !== phone));
@@ -1591,6 +1604,19 @@ function App() {
       }
 
       try {
+          // Xóa các dữ liệu liên quan trước (để tránh lỗi foreign key)
+          await supabase.from('cskh').delete().in('customer_phone', phones);
+          await supabase.from('orders').delete().in('customer_phone', phones);
+          await supabase.from('re_examinations').delete().in('customer_phone', phones);
+
+          const customerLeads = leads.filter(l => phones.includes(l.phone));
+          const leadIds = customerLeads.map(l => l.id);
+          
+          if (leadIds.length > 0) {
+              await supabase.from('notes').delete().in('lead_id', leadIds);
+              await supabase.from('leads').delete().in('id', leadIds);
+          }
+
           const { error } = await supabase.from('customers').delete().in('phone', phones);
           if (error) throw error;
           setCustomers(prev => prev.filter(c => !phones.includes(c.phone)));
