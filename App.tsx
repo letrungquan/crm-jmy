@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './lib/supabaseClient';
 import { 
   Lead, Sale, Order, CskhItem, ReExamination, Customer, CustomerData,
@@ -110,6 +110,35 @@ function App() {
       onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
+  // --- Sync Selected Items on Realtime Updates ---
+  useEffect(() => {
+      if (selectedLead) {
+          const updated = leads.find(l => l.id === selectedLead.id);
+          if (updated && updated !== selectedLead) setSelectedLead(updated);
+      }
+  }, [leads]);
+
+  useEffect(() => {
+      if (selectedCustomer) {
+          const updated = customers.find(c => c.phone === selectedCustomer.phone);
+          if (updated && updated !== selectedCustomer) setSelectedCustomer(updated);
+      }
+  }, [customers]);
+
+  useEffect(() => {
+      if (selectedCskh) {
+          const updated = cskhItems.find(c => c.id === selectedCskh.id);
+          if (updated && updated !== selectedCskh) setSelectedCskh(updated);
+      }
+  }, [cskhItems]);
+
+  useEffect(() => {
+      if (selectedReExam) {
+          const updated = reExaminations.find(r => r.id === selectedReExam.id);
+          if (updated && updated !== selectedReExam) setSelectedReExam(updated);
+      }
+  }, [reExaminations]);
+
   // --- Filter State ---
   const [selectedSource, setSelectedSource] = useState<string>('all');
   const [selectedSaleFilter, setSelectedSaleFilter] = useState<string>('all');
@@ -185,20 +214,209 @@ function App() {
       }
   };
 
-  const handleNewActivity = () => {
-      fetchActivities();
+  const realtimeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchActivitiesDebounced = () => {
+      if (realtimeTimeoutRef.current) {
+          clearTimeout(realtimeTimeoutRef.current);
+      }
+      realtimeTimeoutRef.current = setTimeout(() => {
+          fetchActivities();
+      }, 1000);
+  };
+
+  const handleLeadChange = async (payload: any) => {
+      if (payload.eventType === 'DELETE') {
+          setLeads(prev => prev.filter(l => l.id !== payload.old.id));
+      } else {
+          const { data } = await supabase.from('leads').select('*, notes(*)').eq('id', payload.new.id).single();
+          if (data) {
+              const formatted: Lead = {
+                  id: data.id,
+                  name: data.name,
+                  phone: data.phone,
+                  source: data.source,
+                  assignedTo: data.assigned_to,
+                  status: data.status,
+                  notes: (data.notes || []).map((n: any) => ({
+                      id: n.id,
+                      content: n.content,
+                      createdAt: n.created_at,
+                      createdBy: n.created_by
+                  })),
+                  createdAt: data.created_at,
+                  updatedAt: data.updated_at,
+                  appointmentDate: data.appointment_date,
+                  projectedAppointmentDate: data.projected_appointment_date,
+                  service: data.service,
+                  description: data.description,
+                  priority: data.priority,
+                  potentialRevenue: data.potential_revenue,
+              };
+              setLeads(prev => {
+                  if (prev.find(l => l.id === formatted.id)) {
+                      return prev.map(l => l.id === formatted.id ? formatted : l);
+                  }
+                  return [formatted, ...prev];
+              });
+          }
+      }
+      fetchActivitiesDebounced();
+  };
+
+  const handleCskhChange = async (payload: any) => {
+      if (payload.eventType === 'DELETE') {
+          setCskhItems(prev => prev.filter(c => c.id !== payload.old.id));
+      } else {
+          const { data } = await supabase.from('cskh').select('*').eq('id', payload.new.id).single();
+          if (data) {
+              setCskhItems(prev => {
+                  const existing = prev.find(c => c.id === data.id);
+                  const formatted: CskhItem = {
+                      id: data.id,
+                      customerPhone: data.customer_phone,
+                      customerName: existing?.customerName || 'Khách hàng',
+                      service: data.service,
+                      status: data.status,
+                      assignedTo: data.assigned_to,
+                      originalLeadId: data.original_lead_id,
+                      createdAt: data.created_at,
+                      updatedAt: data.updated_at,
+                      doctorName: data.doctor_name,
+                      reExaminationDate: data.re_examination_date
+                  };
+                  if (existing) return prev.map(c => c.id === formatted.id ? formatted : c);
+                  return [formatted, ...prev];
+              });
+          }
+      }
+      fetchActivitiesDebounced();
+  };
+
+  const handleOrderChange = async (payload: any) => {
+      if (payload.eventType === 'DELETE') {
+          setOrders(prev => prev.filter(o => o.id !== payload.old.id));
+      } else {
+          const { data } = await supabase.from('orders').select('*').eq('id', payload.new.id).single();
+          if (data) {
+              const formatted: Order = {
+                  id: data.id,
+                  customerPhone: data.customer_phone,
+                  customerName: data.customer_name,
+                  service: data.service,
+                  revenue: data.revenue,
+                  createdAt: data.created_at,
+                  status: data.status,
+                  assignedTo: data.assigned_to,
+                  externalId: data.external_id,
+                  source: data.source
+              };
+              setOrders(prev => {
+                  if (prev.find(o => o.id === formatted.id)) return prev.map(o => o.id === formatted.id ? formatted : o);
+                  return [formatted, ...prev];
+              });
+          }
+      }
+      fetchActivitiesDebounced();
+  };
+
+  const handleReExamChange = async (payload: any) => {
+      if (payload.eventType === 'DELETE') {
+          setReExaminations(prev => prev.filter(r => r.id !== payload.old.id));
+      } else {
+          const { data } = await supabase.from('re_examinations').select('*').eq('id', payload.new.id).single();
+          if (data) {
+              const formatted: ReExamination = {
+                  id: data.id,
+                  customerPhone: data.customer_phone,
+                  customerName: data.customer_name,
+                  date: data.date,
+                  appointmentTime: data.appointment_time,
+                  service: data.service,
+                  doctorName: data.doctor_name,
+                  assignedTo: data.assigned_to,
+                  note: data.note,
+                  status: data.status,
+                  potentialRevenue: data.potential_revenue,
+                  createdAt: data.created_at,
+                  updatedAt: data.updated_at
+              };
+              setReExaminations(prev => {
+                  if (prev.find(r => r.id === formatted.id)) return prev.map(r => r.id === formatted.id ? formatted : r);
+                  return [formatted, ...prev];
+              });
+          }
+      }
+      fetchActivitiesDebounced();
+  };
+
+  const handleCustomerChange = async (payload: any) => {
+      if (payload.eventType === 'DELETE') {
+          setCustomers(prev => prev.filter(c => c.phone !== payload.old.phone));
+      } else {
+          const { data } = await supabase.from('customers').select('*').eq('phone', payload.new.phone).single();
+          if (data) {
+              setCustomers(prev => {
+                  const existing = prev.find(c => c.phone === data.phone);
+                  const formatted: Customer = {
+                      phone: data.phone,
+                      name: data.name,
+                      email: data.email,
+                      address: data.address,
+                      location: data.location,
+                      customerGroup: data.customer_group,
+                      relationshipStatus: data.relationship_status,
+                      gender: data.gender,
+                      dateOfBirth: data.date_of_birth,
+                      occupation: data.occupation,
+                      profileCompleteness: data.profile_completeness,
+                      source: data.source,
+                      assignedTo: data.assigned_to,
+                      leads: existing?.leads || [],
+                      orders: existing?.orders || [],
+                      generalNotes: data.general_notes || '',
+                      tags: data.tags || []
+                  };
+                  if (existing) return prev.map(c => c.phone === formatted.phone ? formatted : c);
+                  return [formatted, ...prev];
+              });
+          }
+      }
+      fetchActivitiesDebounced();
+  };
+
+  const handleNoteChange = async (payload: any) => {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const leadId = payload.new.lead_id;
+          if (leadId) {
+              const { data } = await supabase.from('leads').select('*, notes(*)').eq('id', leadId).single();
+              if (data) {
+                  setLeads(prev => prev.map(l => l.id === leadId ? {
+                      ...l,
+                      notes: (data.notes || []).map((n: any) => ({
+                          id: n.id,
+                          content: n.content,
+                          createdAt: n.created_at,
+                          createdBy: n.created_by
+                      }))
+                  } : l));
+              }
+          }
+      }
+      fetchActivitiesDebounced();
   };
 
   useEffect(() => {
       if (useLocalOnly || !session) return;
 
       const channel = supabase.channel('dashboard-activities')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, handleNewActivity)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'cskh' }, handleNewActivity)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, handleNewActivity)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 're_examinations' }, handleNewActivity)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, handleNewActivity)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, handleNewActivity)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, handleLeadChange)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'cskh' }, handleCskhChange)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, handleOrderChange)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 're_examinations' }, handleReExamChange)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, handleCustomerChange)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, handleNoteChange)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchActivitiesDebounced)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
               const newSetting = payload.new as any;
               if (!newSetting) return;
@@ -214,7 +432,11 @@ function App() {
                   setCskhStatuses(newSetting.value);
               }
           })
-          .subscribe();
+          .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                  console.log('Realtime connected successfully');
+              }
+          });
       
       return () => {
           supabase.removeChannel(channel);

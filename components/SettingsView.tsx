@@ -643,6 +643,14 @@ begin
 end;
 $$ language plpgsql security definer;
 
+-- 11. (RẤT QUAN TRỌNG) BẬT REALTIME CHO TẤT CẢ CÁC BẢNG ĐỂ ĐỒNG BỘ DỮ LIỆU GIỮA CÁC USER
+begin;
+  -- Xóa publication cũ nếu có
+  drop publication if exists supabase_realtime;
+  -- Tạo lại publication cho tất cả các bảng
+  create publication supabase_realtime for table leads, cskh, orders, re_examinations, customers, notes, profiles, app_settings;
+commit;
+
 -- Fix Missing columns in customers
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS assigned_to uuid REFERENCES auth.users;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS source text;
