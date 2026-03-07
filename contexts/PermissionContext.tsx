@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export type Module = 'dashboard' | 'lead' | 'customer' | 'order' | 'cskh' | 're_exam' | 'settings' | 'user' | 'report' | 'revenue' | 'system';
-export type Action = 'view' | 'create' | 'edit' | 'delete' | 'view_all' | 'import' | 'access' | 'manage';
+export type Module = 'leads' | 'customers' | 'orders' | 'cskh' | 'appointments' | 'revenue_schedule' | 'staff' | 'settings' | 'reports';
+export type Action = 'view' | 'create' | 'edit' | 'delete' | 'import' | 'export';
 
 interface PermissionContextType {
   hasPermission: (module: Module, action: Action) => boolean;
@@ -10,8 +10,8 @@ interface PermissionContextType {
   canCreate: (module: Module) => boolean;
   canEdit: (module: Module) => boolean;
   canDelete: (module: Module) => boolean;
-  canViewAll: (module: Module) => boolean;
   canImport: (module: Module) => boolean;
+  canExport: (module: Module) => boolean;
   refreshPermissions: () => Promise<void>;
   isLoading: boolean;
   isAdmin: boolean;
@@ -36,12 +36,12 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       // 1. Lấy vai trò của user (từ user_roles hoặc profiles)
       // Theo yêu cầu: dùng bảng user_roles
-      const { data: userRoles } = await supabase
+      const { data: userRoles, error: userRolesError } = await supabase
         .from('user_roles')
-        .select('role_id, roles(is_system)')
+        .select('role_id, roles(name, is_system)')
         .eq('user_id', session.user.id);
 
-      if (!userRoles || userRoles.length === 0) {
+      if (userRolesError || !userRoles || userRoles.length === 0) {
         // Fallback to profiles if user_roles is empty
         const { data: profile } = await supabase
           .from('profiles')
@@ -58,13 +58,15 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return;
       }
 
-      const isSystemAdmin = userRoles.some((ur: any) => ur.roles?.is_system && ur.role_id === 'admin');
+      const isSystemAdmin = userRoles.some((ur: any) => ur.roles?.is_system || ur.roles?.name === 'Quản trị viên');
       if (isSystemAdmin) {
         setIsAdmin(true);
-        return;
+        // We don't return here because we still want to load permissions if they exist,
+        // but isAdmin will override checks anyway.
+      } else {
+        setIsAdmin(false);
       }
 
-      setIsAdmin(false);
       const roleIds = userRoles.map(ur => ur.role_id);
 
       // 2. Lấy quyền của các vai trò
@@ -109,8 +111,8 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const canCreate = useCallback((module: Module) => hasPermission(module, 'create'), [hasPermission]);
   const canEdit = useCallback((module: Module) => hasPermission(module, 'edit'), [hasPermission]);
   const canDelete = useCallback((module: Module) => hasPermission(module, 'delete'), [hasPermission]);
-  const canViewAll = useCallback((module: Module) => hasPermission(module, 'view_all'), [hasPermission]);
   const canImport = useCallback((module: Module) => hasPermission(module, 'import'), [hasPermission]);
+  const canExport = useCallback((module: Module) => hasPermission(module, 'export'), [hasPermission]);
 
   const value = useMemo(() => ({
     hasPermission,
@@ -118,12 +120,12 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     canCreate,
     canEdit,
     canDelete,
-    canViewAll,
     canImport,
+    canExport,
     refreshPermissions,
     isLoading,
     isAdmin
-  }), [hasPermission, canView, canCreate, canEdit, canDelete, canViewAll, canImport, refreshPermissions, isLoading, isAdmin]);
+  }), [hasPermission, canView, canCreate, canEdit, canDelete, canImport, canExport, refreshPermissions, isLoading, isAdmin]);
 
   return (
     <PermissionContext.Provider value={value}>

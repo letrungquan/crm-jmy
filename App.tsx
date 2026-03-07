@@ -43,7 +43,7 @@ import {
 import { PermissionProvider, usePermissions } from './contexts/PermissionContext';
 
 function AppContent() {
-  const { hasPermission, canView, canCreate, canEdit, canDelete, canViewAll, canImport, isAdmin, isLoading } = usePermissions();
+  const { hasPermission, canView, canCreate, canEdit, canDelete, canImport, isAdmin, isLoading } = usePermissions();
   // --- Auth State ---
   const [session, setSession] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<string>('');
@@ -253,7 +253,7 @@ function AppContent() {
                   potentialRevenue: data.potential_revenue,
               };
               setLeads(prev => {
-                  if (!canViewAll('lead') && formatted.assignedTo !== currentUser) {
+                  if (!isAdmin && formatted.assignedTo !== currentUser) {
                       return prev.filter(l => l.id !== formatted.id);
                   }
                   if (prev.find(l => l.id === formatted.id)) {
@@ -273,7 +273,7 @@ function AppContent() {
           const { data } = await supabase.from('cskh').select('*').eq('id', payload.new.id).single();
           if (data) {
               setCskhItems(prev => {
-                  if (!canViewAll('customer') && data.assigned_to !== currentUser) {
+                  if (!isAdmin && data.assigned_to !== currentUser) {
                       return prev.filter(c => c.id !== data.id);
                   }
                   const existing = prev.find(c => c.id === data.id);
@@ -317,7 +317,7 @@ function AppContent() {
                   source: data.source
               };
               setOrders(prev => {
-                  if (!canViewAll('order') && formatted.assignedTo !== currentUser) {
+                  if (!isAdmin && formatted.assignedTo !== currentUser) {
                       return prev.filter(o => o.id !== formatted.id);
                   }
                   if (prev.find(o => o.id === formatted.id)) return prev.map(o => o.id === formatted.id ? formatted : o);
@@ -350,7 +350,7 @@ function AppContent() {
                   updatedAt: data.updated_at
               };
               setReExaminations(prev => {
-                  if (!canViewAll('customer') && formatted.assignedTo !== currentUser) {
+                  if (!isAdmin && formatted.assignedTo !== currentUser) {
                       return prev.filter(r => r.id !== formatted.id);
                   }
                   if (prev.find(r => r.id === formatted.id)) return prev.map(r => r.id === formatted.id ? formatted : r);
@@ -452,7 +452,7 @@ function AppContent() {
       return () => {
           supabase.removeChannel(channel);
       };
-  }, [useLocalOnly, session, currentUser, canViewAll]);
+  }, [useLocalOnly, session, currentUser, isAdmin]);
 
   // --- Helper Functions ---
   const formatErrorMessage = (err: any) => {
@@ -513,7 +513,7 @@ function AppContent() {
             *,
             notes (*)
         `);
-        if (!canViewAll('lead')) {
+        if (!isAdmin) {
             leadsQuery = leadsQuery.eq('assigned_to', currentUser);
         }
         const { data: leadsData, error: leadsError } = await leadsQuery.order('created_at', { ascending: false });
@@ -549,7 +549,7 @@ function AppContent() {
 
         // 3. Fetch CSKH
         let cskhQuery = supabase.from('cskh').select('*');
-        if (!canViewAll('customer')) { // Assuming CSKH uses customer permissions
+        if (!isAdmin) { // Assuming CSKH uses customer permissions
             cskhQuery = cskhQuery.eq('assigned_to', currentUser);
         }
         const { data: cskhData, error: cskhError } = await cskhQuery.order('created_at', { ascending: false });
@@ -572,7 +572,7 @@ function AppContent() {
 
         // 4. Fetch Orders
         let ordersQuery = supabase.from('orders').select('*');
-        if (!canViewAll('order')) {
+        if (!isAdmin) {
             ordersQuery = ordersQuery.eq('assigned_to', currentUser);
         }
         const { data: ordersData, error: ordersError } = await ordersQuery.order('created_at', { ascending: false });
@@ -594,7 +594,7 @@ function AppContent() {
         
         // 5. Fetch Re-examinations
         let reExamQuery = supabase.from('re_examinations').select('*');
-        if (!canViewAll('customer')) {
+        if (!isAdmin) {
             reExamQuery = reExamQuery.eq('assigned_to', currentUser);
         }
         const { data: reExamData } = await reExamQuery;
@@ -727,7 +727,7 @@ function AppContent() {
     } finally {
         setIsRefreshing(false);
     }
-  }, [session, useLocalOnly, localLeads, localCskh, localOrders, localReExams, currentUser, canViewAll]);
+  }, [session, useLocalOnly, localLeads, localCskh, localOrders, localReExams, currentUser, isAdmin]);
 
   // --- Auth Effect ---
   useEffect(() => {
@@ -793,7 +793,7 @@ function AppContent() {
   };
 
   const executeDeleteLead = async (leadId: string) => {
-    if (!hasPermission('lead', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA CƠ HỘI."); return; }
+    if (!hasPermission('leads', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA CƠ HỘI."); return; }
     closeConfirmModal();
     const prevLeads = [...leads];
     setLeads(current => current.filter(l => l.id !== leadId));
@@ -868,7 +868,7 @@ function AppContent() {
   };
 
   const handleAddOrder = async (orderData: any) => {
-      if (!hasPermission('order', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM ĐƠN HÀNG."); return; }
+      if (!hasPermission('orders', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM ĐƠN HÀNG."); return; }
       setIsAddOrderModalOpen(false);
       setIsRefreshing(true);
       
@@ -934,7 +934,7 @@ function AppContent() {
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    if (!hasPermission('order', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
+    if (!hasPermission('orders', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
     setConfirmModal({
         isOpen: true,
         title: 'Xóa đơn hàng',
@@ -962,7 +962,7 @@ function AppContent() {
   };
 
   const handleBulkDeleteOrders = (orderIds: string[]) => {
-      if (!hasPermission('order', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
+      if (!hasPermission('orders', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
       setConfirmModal({
           isOpen: true,
           title: 'Xóa nhiều đơn hàng',
@@ -990,7 +990,7 @@ function AppContent() {
   };
 
   const handleImportOrders = async (newOrders: any[]) => {
-      if (!hasPermission('order', 'import')) {
+      if (!hasPermission('orders', 'import')) {
           alert("BẠN KHÔNG CÓ QUYỀN NHẬP ĐƠN HÀNG.");
           return;
       }
@@ -1136,7 +1136,7 @@ function AppContent() {
   };
 
   const handleUpdateLeadStatus = async (id: string, newStatus: string) => {
-    if (!hasPermission('lead', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT CƠ HỘI."); return; }
+    if (!hasPermission('leads', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT CƠ HỘI."); return; }
     if (newStatus === 'completed') {
         const lead = leads.find(l => l.id === id);
         if (lead) { setLeadToComplete(lead); }
@@ -1285,6 +1285,7 @@ function AppContent() {
   };
 
   const handleUpdateCskhStatus = async (cskhId: string, newStatusId: string) => {
+    if (!hasPermission('cskh', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT CSKH."); return; }
     const prevItems = [...cskhItems];
     setCskhItems(prev => prev.map(item => item.id === cskhId ? { ...item, status: newStatusId, updatedAt: new Date().toISOString() } : item));
 
@@ -1303,6 +1304,7 @@ function AppContent() {
   };
 
   const handleUpdateCskhItem = async (updatedItem: CskhItem) => {
+      if (!hasPermission('cskh', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT CSKH."); return; }
       const now = new Date().toISOString();
       const itemToSave = { ...updatedItem, updatedAt: now };
       
@@ -1330,6 +1332,7 @@ function AppContent() {
   };
 
   const handleUpdateReExamStatus = async (id: string, status: 'pending' | 'called' | 'completed' | 'cancelled' | 'converted') => {
+      if (!hasPermission('appointments', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT TÁI KHÁM."); return; }
       const prevReExams = [...reExaminations];
       setReExaminations(prev => prev.map(item => item.id === id ? { ...item, status } : item));
 
@@ -1348,6 +1351,7 @@ function AppContent() {
   };
 
   const handleUpdateReExam = async (updatedReExam: ReExamination) => {
+      if (!hasPermission('appointments', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT TÁI KHÁM."); return; }
       const now = new Date().toISOString();
       const itemToSave = { ...updatedReExam, updatedAt: now };
       
@@ -1379,7 +1383,7 @@ function AppContent() {
   };
 
   const executeDeleteReExam = async (reExamId: string, requireConfirm = true) => {
-      if (!hasPermission('re_exam', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA TÁI KHÁM."); return; }
+      if (!hasPermission('appointments', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA TÁI KHÁM."); return; }
       if (requireConfirm && !window.confirm("Bạn có chắc chắn muốn xóa lịch tái khám này?")) return;
       
       const prevItems = [...reExaminations];
@@ -1401,6 +1405,7 @@ function AppContent() {
   };
 
   const handleAddReExamination = async (data: any) => {
+      if (!hasPermission('appointments', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM TÁI KHÁM."); return; }
       setIsAddReExamModalOpen(false);
       const now = new Date().toISOString();
       
@@ -1455,7 +1460,7 @@ function AppContent() {
   };
 
   const handleAddCustomer = async (data: CustomerData) => {
-      if (!hasPermission('customer', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM KHÁCH HÀNG."); return; }
+      if (!hasPermission('customers', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM KHÁCH HÀNG."); return; }
       const newCustomer: Customer = {
           ...data,
           name: data.name || 'Khách hàng',
@@ -1511,7 +1516,7 @@ function AppContent() {
   };
 
   const handleUpdateCustomer = async (phone: string, data: Partial<CustomerData>) => {
-      if (!hasPermission('customer', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT KHÁCH HÀNG."); return; }
+      if (!hasPermission('customers', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT KHÁCH HÀNG."); return; }
       setCustomers(prev => prev.map(c => c.phone === phone ? { ...c, ...data } : c));
       
       if (selectedCustomer?.phone === phone) {
@@ -1560,7 +1565,7 @@ function AppContent() {
   };
 
   const handleDeleteCustomer = async (phone: string) => {
-      if (!hasPermission('customer', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
+      if (!hasPermission('customers', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
       setConfirmModal({
           isOpen: true,
           title: 'Xóa khách hàng',
@@ -1607,7 +1612,7 @@ function AppContent() {
   };
 
   const handleBulkDeleteCustomers = (phones: string[]) => {
-      if (!hasPermission('customer', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
+      if (!hasPermission('customers', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
       setConfirmModal({
           isOpen: true,
           title: 'Xóa nhiều khách hàng',
@@ -1654,6 +1659,7 @@ function AppContent() {
   };
 
   const handleAddNoteToLead = async (leadId: string, content: string) => {
+      if (!hasPermission('leads', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM GHI CHÚ CHO CƠ HỘI."); return; }
       const now = new Date().toISOString();
       const newNote: Note = {
           id: `note_${Date.now()}`,
@@ -1687,7 +1693,7 @@ function AppContent() {
   };
 
   const handleAddLead = async (leadData: any) => {
-    if (!hasPermission('lead', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM CƠ HỘI."); return; }
+    if (!hasPermission('leads', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM CƠ HỘI."); return; }
     const now = new Date().toISOString();
     const newLeadId = `lead_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -1732,7 +1738,7 @@ function AppContent() {
   };
 
   const handleUpdateLead = async (updatedLead: Lead) => {
-      if (!hasPermission('lead', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT CƠ HỘI."); return; }
+      if (!hasPermission('leads', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT CƠ HỘI."); return; }
       const now = new Date().toISOString();
       const leadToSave = { ...updatedLead, updatedAt: now };
       
@@ -1924,7 +1930,7 @@ function AppContent() {
                     sales={sales}
                     onAddOrder={() => setIsAddOrderModalOpen(true)}
                     onImportOrders={() => {
-                        if (!hasPermission('order', 'import')) {
+                        if (!hasPermission('orders', 'import')) {
                             alert("BẠN KHÔNG CÓ QUYỀN NHẬP ĐƠN HÀNG.");
                             return;
                         }
@@ -1956,7 +1962,7 @@ function AppContent() {
                     sales={sales}
                     onRefresh={() => fetchData(true)}
                     isAdmin={isAdmin}
-                    canEdit={hasPermission('settings', 'access')}
+                    canEdit={hasPermission('settings', 'edit')}
                 />
             )}
         </main>
