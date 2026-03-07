@@ -7,11 +7,9 @@ interface SettingsViewProps {
   sources: string[];
   relationships: string[];
   customerGroups: string[];
-  roles?: RoleDefinition[];
   onUpdateSources: (newSources: string[]) => void;
   onUpdateRelationships: (newRelationships: string[]) => void;
   onUpdateCustomerGroups: (newGroups: string[]) => void;
-  onUpdateRoles?: (newRoles: RoleDefinition[]) => void;
   useLocalOnly?: boolean;
   sales?: Sale[];
   onRefresh?: () => void;
@@ -74,57 +72,119 @@ const ConfigSection: React.FC<{
   );
 };
 
-const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (roles: RoleDefinition[]) => void }> = ({ roles, onUpdate }) => {
+const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onRefresh: () => void }> = ({ roles, onRefresh }) => {
     const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [newRoleName, setNewRoleName] = useState('');
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
 
     const permissionGroups = [
-        { label: 'Cơ hội (Leads)', prefix: 'lead', actions: ['view', 'create', 'edit', 'delete', 'import'] },
-        { label: 'Khách hàng (Customers)', prefix: 'customer', actions: ['view', 'create', 'edit', 'delete'] },
-        { label: 'Đơn hàng (Orders)', prefix: 'order', actions: ['view', 'create', 'edit', 'delete'] },
-        { label: 'Hệ thống', prefix: 'system', actions: ['settings.access', 'user.manage'] },
+        { label: 'Dashboard', prefix: 'dashboard', actions: ['view'] },
+        { label: 'Cơ hội (Leads)', prefix: 'lead', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'import'] },
+        { label: 'CSKH', prefix: 'cskh', actions: ['view', 'view_all', 'create', 'edit', 'delete'] },
+        { label: 'Tái khám', prefix: 're_exam', actions: ['view', 'view_all', 'create', 'edit', 'delete'] },
+        { label: 'Khách hàng (Customers)', prefix: 'customer', actions: ['view', 'view_all', 'create', 'edit', 'delete'] },
+        { label: 'Đơn hàng (Orders)', prefix: 'order', actions: ['view', 'view_all', 'create', 'edit', 'delete', 'import'] },
+        { label: 'Doanh thu', prefix: 'revenue', actions: ['view', 'view_all'] },
+        { label: 'Nhân sự (HR)', prefix: 'user', actions: ['manage'] },
+        { label: 'Cài đặt', prefix: 'settings', actions: ['access'] },
     ];
 
-    const handleAddRole = () => {
+    const handleAddRole = async () => {
         if (!newRoleName.trim()) return;
-        const newRole: RoleDefinition = {
-            id: `role_${Date.now()}`,
-            name: newRoleName,
-            permissions: ['lead.view', 'customer.view', 'order.view'], // Default read-only
-            isSystem: false
-        };
-        onUpdate([...roles, newRole]);
-        setNewRoleName('');
-        setIsCreating(false);
-        setSelectedRoleId(newRole.id);
-    };
+        const newRoleId = `role_${Date.now()}`;
+        
+        try {
+            const { error: roleError } = await supabase.from('roles').insert({
+                id: newRoleId,
+                name: newRoleName,
+                is_system: false
+            });
+            if (roleError) throw roleError;
 
-    const handleDeleteRole = (roleId: string) => {
-        if (confirm('Bạn có chắc chắn muốn xóa vai trò này? Các nhân viên đang giữ vai trò này sẽ mất quyền truy cập.')) {
-            onUpdate(roles.filter(r => r.id !== roleId));
-            if (selectedRoleId === roleId) setSelectedRoleId(null);
+            // Add default permissions (all false)
+            const permsToInsert = [];
+            for (const group of permissionGroups) {
+                for (const action of group.actions) {
+                    permsToInsert.push({
+                        role_id: newRoleId,
+                        module: group.prefix,
+                        action: action,
+                        allowed: false
+                    });
+                }
+            }
+            
+            const { error: permError } = await supabase.from('role_permissions').insert(permsToInsert);
+            if (permError) throw permError;
+
+            setNewRoleName('');
+            setIsCreating(false);
+            setSelectedRoleId(newRoleId);
+            onRefresh();
+        } catch (error: any) {
+            alert('Lỗi khi tạo vai trò: ' + error.message);
         }
     };
 
-    const togglePermission = (roleId: string, perm: string) => {
-        const roleIndex = roles.findIndex(r => r.id === roleId);
-        if (roleIndex === -1) return;
-        
-        const role = { ...roles[roleIndex] };
-        if (role.isSystem && role.id === 'admin') return; 
+    const confirmDeleteRole = (roleId: string) => {
+        setRoleToDelete(roleId);
+        setIsModalOpen(true);
+    };
 
-        const permSet = new Set(role.permissions);
-        if (permSet.has(perm as Permission)) {
-            permSet.delete(perm as Permission);
-        } else {
-            permSet.add(perm as Permission);
+    const executeDeleteRole = async () => {
+        if (!roleToDelete) return;
+        try {
+            const { error } = await supabase.from('roles').delete().eq('id', roleToDelete);
+            if (error) throw error;
+            
+            if (selectedRoleId === roleToDelete) setSelectedRoleId(null);
+            setIsModalOpen(false);
+            setRoleToDelete(null);
+            onRefresh();
+        } catch (error: any) {
+            alert('Lỗi khi xóa vai trò: ' + error.message);
         }
-        
-        role.permissions = Array.from(permSet);
-        const newRoles = [...roles];
-        newRoles[roleIndex] = role;
-        onUpdate(newRoles);
+    };
+
+    const togglePermission = async (roleId: string, module: string, action: string, currentAllowed: boolean) => {
+        const role = roles.find(r => r.id === roleId);
+        if (!role || (role.isSystem && role.id === 'admin')) return;
+
+        try {
+            // Check if permission record exists
+            const { data: existingPerm, error: checkError } = await supabase
+                .from('role_permissions')
+                .select('id')
+                .eq('role_id', roleId)
+                .eq('module', module)
+                .eq('action', action)
+                .maybeSingle();
+
+            if (checkError) throw checkError;
+
+            if (existingPerm) {
+                const { error: updateError } = await supabase
+                    .from('role_permissions')
+                    .update({ allowed: !currentAllowed })
+                    .eq('id', existingPerm.id);
+                if (updateError) throw updateError;
+            } else {
+                const { error: insertError } = await supabase
+                    .from('role_permissions')
+                    .insert({
+                        role_id: roleId,
+                        module: module,
+                        action: action,
+                        allowed: !currentAllowed
+                    });
+                if (insertError) throw insertError;
+            }
+            onRefresh();
+        } catch (error: any) {
+            alert('Lỗi khi cập nhật quyền: ' + error.message);
+        }
     };
 
     const selectedRole = roles.find(r => r.id === selectedRoleId);
@@ -171,7 +231,7 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (role
                                 {role.isSystem && <span className="text-[10px] text-slate-400 uppercase font-bold">Hệ thống</span>}
                             </div>
                             {!role.isSystem && (
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteRole(role.id); }} className="text-slate-300 hover:text-red-500 p-1">
+                                <button onClick={(e) => { e.stopPropagation(); confirmDeleteRole(role.id); }} className="text-slate-300 hover:text-red-500 p-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                 </button>
                             )}
@@ -192,25 +252,26 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (role
                                         <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{group.label}</h5>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                             {group.actions.map(action => {
-                                                const permKey = group.prefix === 'system' ? action : `${group.prefix}.${action}`;
+                                                const permKey = `${group.prefix}.${action}`;
                                                 const isChecked = selectedRole.permissions.includes(permKey as Permission);
                                                 const isDisabled = selectedRole.id === 'admin';
                                                 
                                                 let label = action;
                                                 if (action === 'view') label = 'Xem';
+                                                if (action === 'view_all') label = 'Xem tất cả';
                                                 if (action === 'create') label = 'Thêm mới';
                                                 if (action === 'edit') label = 'Chỉnh sửa';
                                                 if (action === 'delete') label = 'Xóa';
                                                 if (action === 'import') label = 'Import Excel';
-                                                if (action === 'settings.access') label = 'Truy cập Cài đặt';
-                                                if (action === 'user.manage') label = 'Quản lý User';
+                                                if (action === 'access') label = 'Truy cập Cài đặt';
+                                                if (action === 'manage') label = 'Quản lý User';
 
                                                 return (
                                                     <label key={permKey} className={`flex items-center space-x-2 text-sm p-2 rounded border ${isChecked ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-100'} ${isDisabled ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-blue-300'}`}>
                                                         <input 
                                                             type="checkbox" 
                                                             checked={isChecked}
-                                                            onChange={() => togglePermission(selectedRole.id, permKey)}
+                                                            onChange={() => togglePermission(selectedRole.id, group.prefix, action, isChecked)}
                                                             disabled={isDisabled}
                                                             className="rounded text-blue-600 focus:ring-blue-500"
                                                         />
@@ -228,6 +289,20 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onUpdate: (role
                     )}
                 </div>
             </div>
+
+            {/* Delete Role Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                        <h3 className="text-lg font-bold text-red-600 mb-2">Xóa vai trò</h3>
+                        <p className="text-slate-600 mb-6">Bạn có chắc chắn muốn xóa vai trò này? Các nhân viên đang giữ vai trò này sẽ mất quyền truy cập.</p>
+                        <div className="flex justify-end space-x-3">
+                            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">Hủy</button>
+                            <button onClick={executeDeleteRole} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Xóa</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -298,6 +373,12 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
                 const { error: profileError } = await supabase.from('profiles').update({ name: name, role: roleId }).eq('id', editingUser.id);
                 if (profileError) throw profileError;
 
+                // Also update user_roles table
+                await supabase.from('user_roles').upsert({
+                    user_id: editingUser.id,
+                    role_id: roleId
+                }, { onConflict: 'user_id' });
+
                 if (password && password.length >= 6) {
                      const { error: authError } = await supabase.auth.updateUser({ password: password });
                      if (authError) {
@@ -340,6 +421,13 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
                         }
                         throw upsertError;
                     }
+
+                    // Also update user_roles table
+                    await supabase.from('user_roles').upsert({
+                        user_id: userId,
+                        role_id: roleId
+                    }, { onConflict: 'user_id' });
+
                     alert('Tạo nhân viên thành công!'); 
                 } else {
                     throw new Error("Không thể tạo user. Vui lòng thử lại.");
@@ -575,20 +663,56 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
 };
 
 const SettingsView: React.FC<SettingsViewProps> = (props) => {
+  const [roles, setRoles] = useState<RoleDefinition[]>([]);
+
+  const fetchRolesAndPermissions = async () => {
+    try {
+      const { data: rolesData, error: rolesError } = await supabase.from('roles').select('*');
+      if (rolesError) throw rolesError;
+
+      const { data: permsData, error: permsError } = await supabase.from('role_permissions').select('*');
+      if (permsError) throw permsError;
+
+      const formattedRoles: RoleDefinition[] = (rolesData || []).map(r => {
+        const rolePerms = (permsData || [])
+          .filter(p => p.role_id === r.id && p.allowed)
+          .map(p => p.module === 'system' ? p.action : `${p.module}.${p.action}` as Permission);
+        
+        return {
+          id: r.id,
+          name: r.name,
+          isSystem: r.is_system,
+          description: r.description,
+          permissions: rolePerms
+        };
+      });
+
+      setRoles(formattedRoles);
+    } catch (error) {
+      console.error("Error fetching roles:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (props.isAdmin) {
+      fetchRolesAndPermissions();
+    }
+  }, [props.isAdmin]);
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold text-slate-800 mb-6">Cài đặt hệ thống</h2>
       
-      {props.roles && props.onUpdateRoles && props.isAdmin && (
-          <RoleManagementSection roles={props.roles} onUpdate={props.onUpdateRoles} />
+      {props.isAdmin && (
+          <RoleManagementSection roles={roles} onRefresh={fetchRolesAndPermissions} />
       )}
 
       {props.sales && props.onRefresh && props.isAdmin && (
           <UserManagementSection 
             sales={props.sales} 
-            onRefresh={props.onRefresh} 
+            onRefresh={() => { props.onRefresh?.(); fetchRolesAndPermissions(); }} 
             isAdmin={props.isAdmin} 
-            roles={props.roles || []}
+            roles={roles}
           />
       )}
 
@@ -658,6 +782,16 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS date_of_birth date;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS customer_group text;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS relationship_status text;
 
+-- Fix foreign key constraint for re_examinations to cascade on delete
+ALTER TABLE re_examinations DROP CONSTRAINT IF EXISTS re_examinations_customer_phone_fkey;
+ALTER TABLE re_examinations ADD CONSTRAINT re_examinations_customer_phone_fkey FOREIGN KEY (customer_phone) REFERENCES customers(phone) ON DELETE CASCADE;
+
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_customer_phone_fkey;
+ALTER TABLE orders ADD CONSTRAINT orders_customer_phone_fkey FOREIGN KEY (customer_phone) REFERENCES customers(phone) ON DELETE CASCADE;
+
+ALTER TABLE cskh DROP CONSTRAINT IF EXISTS cskh_customer_phone_fkey;
+ALTER TABLE cskh ADD CONSTRAINT cskh_customer_phone_fkey FOREIGN KEY (customer_phone) REFERENCES customers(phone) ON DELETE CASCADE;
+
 -- Create Re-examination table with RLS Policies
 CREATE TABLE IF NOT EXISTS re_examinations (
   id text PRIMARY KEY,
@@ -688,6 +822,60 @@ ALTER TABLE re_examinations ENABLE ROW LEVEL SECURITY;
 -- Add generic policies (Modify if strict role-based access is needed)
 DROP POLICY IF EXISTS "Allow all for authenticated on re_examinations" ON re_examinations;
 CREATE POLICY "Allow all for authenticated on re_examinations" ON re_examinations FOR ALL USING (auth.role() = 'authenticated');
+
+-- RBAC Tables
+CREATE TABLE IF NOT EXISTS roles (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  description text,
+  is_system boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  role_id text REFERENCES roles(id) ON DELETE CASCADE,
+  module text NOT NULL,
+  action text NOT NULL,
+  allowed boolean DEFAULT false,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(role_id, module, action)
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  role_id text REFERENCES roles(id) ON DELETE CASCADE,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(user_id, role_id)
+);
+
+-- Insert default roles
+INSERT INTO roles (id, name, description, is_system) VALUES 
+('admin', 'Quản trị viên', 'Toàn quyền hệ thống', true),
+('sale', 'Nhân viên Sale', 'Quyền nhân viên kinh doanh', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Enable RLS for RBAC tables
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE role_permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+
+-- Add generic policies for RBAC
+DROP POLICY IF EXISTS "Allow all for authenticated on roles" ON roles;
+CREATE POLICY "Allow all for authenticated on roles" ON roles FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Allow all for authenticated on role_permissions" ON role_permissions;
+CREATE POLICY "Allow all for authenticated on role_permissions" ON role_permissions FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Allow all for authenticated on user_roles" ON user_roles;
+CREATE POLICY "Allow all for authenticated on user_roles" ON user_roles FOR ALL USING (auth.role() = 'authenticated');
+
+-- Add RBAC tables to realtime publication
+begin;
+  drop publication if exists supabase_realtime;
+  create publication supabase_realtime for table leads, cskh, orders, re_examinations, customers, notes, profiles, app_settings, roles, role_permissions, user_roles;
+commit;
 `} className="w-full h-40 text-[10px] font-mono p-2 border border-yellow-200 rounded bg-white focus:outline-none" />
                   </div>
                   <p className="text-xs text-yellow-700 italic">Copy lệnh trên và chạy trong SQL Editor của Supabase để khởi tạo bảng và cấp quyền.</p>

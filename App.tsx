@@ -40,7 +40,10 @@ import {
   INITIAL_STATUSES, INITIAL_CSKH_STATUSES, INITIAL_SALES 
 } from './constants';
 
-function App() {
+import { PermissionProvider, usePermissions } from './contexts/PermissionContext';
+
+function AppContent() {
+  const { hasPermission, canView, canCreate, canEdit, canDelete, canViewAll, canImport, isAdmin, isLoading } = usePermissions();
   // --- Auth State ---
   const [session, setSession] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<string>('');
@@ -62,10 +65,6 @@ function App() {
   const [sales, setSales] = useState<Sale[]>(INITIAL_SALES);
   
   // --- Config State ---
-  const [roles, setRoles] = useState<RoleDefinition[]>([
-    { id: 'admin', name: 'Quản trị viên', permissions: [], isSystem: true },
-    { id: 'sale', name: 'Nhân viên Sale', permissions: [], isSystem: false },
-  ]);
   const [statuses, setStatuses] = useState<StatusConfig[]>(INITIAL_STATUSES);
   const [cskhStatuses, setCskhStatuses] = useState<StatusConfig[]>(INITIAL_CSKH_STATUSES);
   const [sources, setSources] = useState<string[]>(['Facebook', 'Zalo', 'Website', 'Direct', 'Referral']);
@@ -254,6 +253,9 @@ function App() {
                   potentialRevenue: data.potential_revenue,
               };
               setLeads(prev => {
+                  if (!canViewAll('lead') && formatted.assignedTo !== currentUser) {
+                      return prev.filter(l => l.id !== formatted.id);
+                  }
                   if (prev.find(l => l.id === formatted.id)) {
                       return prev.map(l => l.id === formatted.id ? formatted : l);
                   }
@@ -271,6 +273,9 @@ function App() {
           const { data } = await supabase.from('cskh').select('*').eq('id', payload.new.id).single();
           if (data) {
               setCskhItems(prev => {
+                  if (!canViewAll('customer') && data.assigned_to !== currentUser) {
+                      return prev.filter(c => c.id !== data.id);
+                  }
                   const existing = prev.find(c => c.id === data.id);
                   const formatted: CskhItem = {
                       id: data.id,
@@ -312,6 +317,9 @@ function App() {
                   source: data.source
               };
               setOrders(prev => {
+                  if (!canViewAll('order') && formatted.assignedTo !== currentUser) {
+                      return prev.filter(o => o.id !== formatted.id);
+                  }
                   if (prev.find(o => o.id === formatted.id)) return prev.map(o => o.id === formatted.id ? formatted : o);
                   return [formatted, ...prev];
               });
@@ -342,6 +350,9 @@ function App() {
                   updatedAt: data.updated_at
               };
               setReExaminations(prev => {
+                  if (!canViewAll('customer') && formatted.assignedTo !== currentUser) {
+                      return prev.filter(r => r.id !== formatted.id);
+                  }
                   if (prev.find(r => r.id === formatted.id)) return prev.map(r => r.id === formatted.id ? formatted : r);
                   return [formatted, ...prev];
               });
@@ -441,7 +452,7 @@ function App() {
       return () => {
           supabase.removeChannel(channel);
       };
-  }, [useLocalOnly, session]);
+  }, [useLocalOnly, session, currentUser, canViewAll]);
 
   // --- Helper Functions ---
   const formatErrorMessage = (err: any) => {
@@ -450,19 +461,6 @@ function App() {
 
   const closeConfirmModal = () => {
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
-  };
-
-  const hasPermission = (permission: Permission): boolean => {
-    if (!userProfile) return false;
-    if (userProfile.role === 'admin') return true;
-    
-    const role = roles.find(r => r.id === userProfile.role);
-    if (!role) return false;
-    
-    // Admin role override in permissions check
-    if (role.id === 'admin') return true;
-
-    return role.permissions.includes(permission);
   };
 
   // --- Data Fetching ---
@@ -511,10 +509,14 @@ function App() {
         if (profiles.length > 0) setSales(profiles);
 
         // 2. Fetch Leads
-        const { data: leadsData, error: leadsError } = await supabase.from('leads').select(`
+        let leadsQuery = supabase.from('leads').select(`
             *,
             notes (*)
-        `).order('created_at', { ascending: false });
+        `);
+        if (!canViewAll('lead')) {
+            leadsQuery = leadsQuery.eq('assigned_to', currentUser);
+        }
+        const { data: leadsData, error: leadsError } = await leadsQuery.order('created_at', { ascending: false });
         
         if (leadsError) throw leadsError;
         
@@ -546,7 +548,11 @@ function App() {
         setLeads(formattedLeads);
 
         // 3. Fetch CSKH
-        const { data: cskhData, error: cskhError } = await supabase.from('cskh').select('*').order('created_at', { ascending: false });
+        let cskhQuery = supabase.from('cskh').select('*');
+        if (!canViewAll('customer')) { // Assuming CSKH uses customer permissions
+            cskhQuery = cskhQuery.eq('assigned_to', currentUser);
+        }
+        const { data: cskhData, error: cskhError } = await cskhQuery.order('created_at', { ascending: false });
         if (cskhError) throw cskhError;
         
         const formattedCskh: CskhItem[] = (cskhData || []).map(c => ({
@@ -565,7 +571,11 @@ function App() {
         setCskhItems(formattedCskh);
 
         // 4. Fetch Orders
-        const { data: ordersData, error: ordersError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+        let ordersQuery = supabase.from('orders').select('*');
+        if (!canViewAll('order')) {
+            ordersQuery = ordersQuery.eq('assigned_to', currentUser);
+        }
+        const { data: ordersData, error: ordersError } = await ordersQuery.order('created_at', { ascending: false });
         if (ordersError) throw ordersError;
 
         const formattedOrders: Order[] = (ordersData || []).map(o => ({
@@ -583,7 +593,11 @@ function App() {
         setOrders(formattedOrders);
         
         // 5. Fetch Re-examinations
-        const { data: reExamData } = await supabase.from('re_examinations').select('*');
+        let reExamQuery = supabase.from('re_examinations').select('*');
+        if (!canViewAll('customer')) {
+            reExamQuery = reExamQuery.eq('assigned_to', currentUser);
+        }
+        const { data: reExamData } = await reExamQuery;
         const formattedReExams: ReExamination[] = (reExamData || []).map(r => ({
            id: r.id,
            customerPhone: r.customer_phone,
@@ -713,7 +727,7 @@ function App() {
     } finally {
         setIsRefreshing(false);
     }
-  }, [session, useLocalOnly, localLeads, localCskh, localOrders, localReExams]);
+  }, [session, useLocalOnly, localLeads, localCskh, localOrders, localReExams, currentUser, canViewAll]);
 
   // --- Auth Effect ---
   useEffect(() => {
@@ -730,8 +744,6 @@ function App() {
                         setUserProfile({ id: session.user.id, name: session.user.email || 'User', role: 'admin' });
                     }
                 }, () => setUserProfile({ id: session.user.id, name: 'Offline User', role: 'admin' }));
-            
-            fetchData(true);
         }
     });
 
@@ -745,7 +757,6 @@ function App() {
                 .then(({ data }) => {
                     if (data) setUserProfile(data);
                 });
-            fetchData(true);
         } else {
             setCurrentUser('');
             setUserProfile(null);
@@ -754,7 +765,14 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, []); // Remove fetchData from dependency to avoid loop
+  }, []); // Auth state only
+
+  // --- Initial Data Fetch Effect ---
+  useEffect(() => {
+      if (useLocalOnly || (session && currentUser && !isLoading)) {
+          fetchData(true);
+      }
+  }, [session, currentUser, isLoading, fetchData, useLocalOnly]);
 
   // --- Actions (Giữ nguyên logic, thêm check useLocalOnly) ---
 
@@ -775,6 +793,7 @@ function App() {
   };
 
   const executeDeleteLead = async (leadId: string) => {
+    if (!hasPermission('lead', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA CƠ HỘI."); return; }
     closeConfirmModal();
     const prevLeads = [...leads];
     setLeads(current => current.filter(l => l.id !== leadId));
@@ -797,6 +816,7 @@ function App() {
   };
 
   const executeDeleteCskh = async (cskhId: string, requireConfirm = true) => {
+      if (!hasPermission('cskh', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA CSKH."); return; }
       try {
           console.log('Attempting to delete CSKH item:', cskhId);
           
@@ -848,6 +868,7 @@ function App() {
   };
 
   const handleAddOrder = async (orderData: any) => {
+      if (!hasPermission('order', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM ĐƠN HÀNG."); return; }
       setIsAddOrderModalOpen(false);
       setIsRefreshing(true);
       
@@ -913,7 +934,7 @@ function App() {
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    if (!hasPermission('order.delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
+    if (!hasPermission('order', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
     setConfirmModal({
         isOpen: true,
         title: 'Xóa đơn hàng',
@@ -941,7 +962,7 @@ function App() {
   };
 
   const handleBulkDeleteOrders = (orderIds: string[]) => {
-      if (!hasPermission('order.delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
+      if (!hasPermission('order', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA ĐƠN HÀNG."); return; }
       setConfirmModal({
           isOpen: true,
           title: 'Xóa nhiều đơn hàng',
@@ -969,7 +990,7 @@ function App() {
   };
 
   const handleImportOrders = async (newOrders: any[]) => {
-      if (!hasPermission('order.import')) {
+      if (!hasPermission('order', 'import')) {
           alert("BẠN KHÔNG CÓ QUYỀN NHẬP ĐƠN HÀNG.");
           return;
       }
@@ -1115,6 +1136,7 @@ function App() {
   };
 
   const handleUpdateLeadStatus = async (id: string, newStatus: string) => {
+    if (!hasPermission('lead', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT CƠ HỘI."); return; }
     if (newStatus === 'completed') {
         const lead = leads.find(l => l.id === id);
         if (lead) { setLeadToComplete(lead); }
@@ -1357,6 +1379,7 @@ function App() {
   };
 
   const executeDeleteReExam = async (reExamId: string, requireConfirm = true) => {
+      if (!hasPermission('re_exam', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA TÁI KHÁM."); return; }
       if (requireConfirm && !window.confirm("Bạn có chắc chắn muốn xóa lịch tái khám này?")) return;
       
       const prevItems = [...reExaminations];
@@ -1432,6 +1455,7 @@ function App() {
   };
 
   const handleAddCustomer = async (data: CustomerData) => {
+      if (!hasPermission('customer', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM KHÁCH HÀNG."); return; }
       const newCustomer: Customer = {
           ...data,
           name: data.name || 'Khách hàng',
@@ -1487,6 +1511,7 @@ function App() {
   };
 
   const handleUpdateCustomer = async (phone: string, data: Partial<CustomerData>) => {
+      if (!hasPermission('customer', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT KHÁCH HÀNG."); return; }
       setCustomers(prev => prev.map(c => c.phone === phone ? { ...c, ...data } : c));
       
       if (selectedCustomer?.phone === phone) {
@@ -1535,7 +1560,7 @@ function App() {
   };
 
   const handleDeleteCustomer = async (phone: string) => {
-      if (!hasPermission('customer.delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
+      if (!hasPermission('customer', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
       setConfirmModal({
           isOpen: true,
           title: 'Xóa khách hàng',
@@ -1582,7 +1607,7 @@ function App() {
   };
 
   const handleBulkDeleteCustomers = (phones: string[]) => {
-      if (!hasPermission('customer.delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
+      if (!hasPermission('customer', 'delete')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC XÓA KHÁCH HÀNG."); return; }
       setConfirmModal({
           isOpen: true,
           title: 'Xóa nhiều khách hàng',
@@ -1662,6 +1687,7 @@ function App() {
   };
 
   const handleAddLead = async (leadData: any) => {
+    if (!hasPermission('lead', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM CƠ HỘI."); return; }
     const now = new Date().toISOString();
     const newLeadId = `lead_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -1706,6 +1732,7 @@ function App() {
   };
 
   const handleUpdateLead = async (updatedLead: Lead) => {
+      if (!hasPermission('lead', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT CƠ HỘI."); return; }
       const now = new Date().toISOString();
       const leadToSave = { ...updatedLead, updatedAt: now };
       
@@ -1897,7 +1924,7 @@ function App() {
                     sales={sales}
                     onAddOrder={() => setIsAddOrderModalOpen(true)}
                     onImportOrders={() => {
-                        if (!hasPermission('order.import')) {
+                        if (!hasPermission('order', 'import')) {
                             alert("BẠN KHÔNG CÓ QUYỀN NHẬP ĐƠN HÀNG.");
                             return;
                         }
@@ -1922,15 +1949,14 @@ function App() {
                     sources={sources}
                     relationships={relationships}
                     customerGroups={customerGroups}
-                    roles={roles}
                     onUpdateSources={(v) => updateSetting('sources', v, setSources)}
                     onUpdateRelationships={(v) => updateSetting('relationships', v, setRelationships)}
                     onUpdateCustomerGroups={(v) => updateSetting('customer_groups', v, setCustomerGroups)}
-                    onUpdateRoles={setRoles}
                     useLocalOnly={useLocalOnly}
                     sales={sales}
                     onRefresh={() => fetchData(true)}
-                    isAdmin={userProfile?.role === 'admin'}
+                    isAdmin={isAdmin}
+                    canEdit={hasPermission('settings', 'access')}
                 />
             )}
         </main>
@@ -2152,6 +2178,14 @@ function App() {
       />
 
     </div>
+  );
+}
+
+function App() {
+  return (
+    <PermissionProvider>
+      <AppContent />
+    </PermissionProvider>
   );
 }
 

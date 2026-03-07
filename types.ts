@@ -19,9 +19,9 @@ export interface Note {
 
 // Permission strings: "resource.action"
 export type Permission = 
-  | 'lead.view' | 'lead.create' | 'lead.edit' | 'lead.delete' | 'lead.import'
-  | 'customer.view' | 'customer.create' | 'customer.edit' | 'customer.delete'
-  | 'order.view' | 'order.create' | 'order.edit' | 'order.delete' | 'order.import'
+  | 'lead.view' | 'lead.view_all' | 'lead.create' | 'lead.edit' | 'lead.delete' | 'lead.import'
+  | 'customer.view' | 'customer.view_all' | 'customer.create' | 'customer.edit' | 'customer.delete'
+  | 'order.view' | 'order.view_all' | 'order.create' | 'order.edit' | 'order.delete' | 'order.import'
   | 'settings.access' | 'user.manage';
 
 export interface RoleDefinition {
@@ -97,6 +97,7 @@ export interface ReExamination {
   note?: string;
   status: 'pending' | 'called' | 'completed' | 'cancelled' | 'converted'; // pending=Cần gọi, called=Đã gọi, completed=Hoàn thành
   createdAt: string;
+  updatedAt?: string;
   potentialRevenue?: number; // Doanh thu dự kiến
 }
 
