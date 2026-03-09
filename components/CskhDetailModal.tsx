@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { CskhItem, Sale, StatusConfig } from '../types';
 import { DOCTORS } from '../constants';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface CskhDetailModalProps {
   item: CskhItem;
@@ -14,6 +15,7 @@ interface CskhDetailModalProps {
 }
 
 const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses, onClose, onSave, onViewCustomer, onDelete }) => {
+  const { canDelete, canEdit } = usePermissions();
   const [currentItem, setCurrentItem] = useState<CskhItem>(item);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -140,7 +142,7 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
 
         <footer className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
           <div>
-            {onDelete && (
+            {onDelete && canDelete('cskh') && (
                 <button 
                     type="button"
                     onClick={() => {
@@ -156,9 +158,11 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
               <button onClick={onClose} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50">
                 Huỷ
               </button>
-              <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-bold">
-                Lưu thay đổi
-              </button>
+              {canEdit('cskh') && (
+                  <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-bold">
+                    Lưu thay đổi
+                  </button>
+              )}
           </div>
         </footer>
       </div>

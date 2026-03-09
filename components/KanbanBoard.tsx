@@ -2,6 +2,7 @@
 import React from 'react';
 import { Lead, Sale, StatusConfig } from '../types';
 import KanbanCard from './KanbanCard';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface KanbanBoardProps {
   leads: Lead[];
@@ -36,11 +37,13 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   selectedSale,
   onSaleChange
 }) => {
+  const { canCreate, canEdit } = usePermissions();
   const [draggedOverColumn, setDraggedOverColumn] = React.useState<string | null>(null);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, statusId: string) => {
     e.preventDefault();
     setDraggedOverColumn(null);
+    if (!canEdit('leads')) return;
     const leadId = e.dataTransfer.getData('leadId');
     if (leadId) {
       onUpdateLeadStatus(leadId, statusId);
@@ -141,15 +144,17 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     />
                   );
                 })}
-                <button 
-                  onClick={() => onAddLead(statusConfig.id)}
-                  className="w-full text-left text-sm text-slate-500 hover:bg-slate-200 p-2 rounded-lg flex items-center"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Thêm mới
-                </button>
+                {canCreate('leads') && (
+                  <button 
+                    onClick={() => onAddLead(statusConfig.id)}
+                    className="w-full text-left text-sm text-slate-500 hover:bg-slate-200 p-2 rounded-lg flex items-center"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Thêm mới
+                  </button>
+                )}
               </div>
             </div>
           );

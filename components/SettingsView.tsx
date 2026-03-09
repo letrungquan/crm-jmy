@@ -374,10 +374,11 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
                 if (profileError) throw profileError;
 
                 // Also update user_roles table
-                await supabase.from('user_roles').upsert({
+                await supabase.from('user_roles').delete().eq('user_id', editingUser.id);
+                await supabase.from('user_roles').insert({
                     user_id: editingUser.id,
                     role_id: roleId
-                }, { onConflict: 'user_id' });
+                });
 
                 if (password && password.length >= 6) {
                      const { error: authError } = await supabase.auth.updateUser({ password: password });
@@ -423,10 +424,10 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
                     }
 
                     // Also update user_roles table
-                    await supabase.from('user_roles').upsert({
+                    await supabase.from('user_roles').insert({
                         user_id: userId,
                         role_id: roleId
-                    }, { onConflict: 'user_id' });
+                    });
 
                     alert('Tạo nhân viên thành công!'); 
                 } else {

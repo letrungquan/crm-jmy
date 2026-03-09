@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Order, Sale, CustomerData } from '../types';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface OrderListProps {
   orders: Order[];
@@ -49,6 +50,7 @@ const SourceBadge = ({ source }: { source?: string }) => {
 };
 
 const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOrder, onImportOrders, onDeleteOrder, canImport = false, onBulkDelete }) => {
+  const { canCreate, canDelete } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -139,15 +141,17 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                         Import KiotViet
                     </button>
                 )}
-                <button 
-                    onClick={onAddOrder} 
-                    className="flex-1 sm:flex-none flex items-center justify-center h-9 px-4 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Tạo đơn
-                </button>
+                {canCreate('orders') && (
+                    <button 
+                        onClick={onAddOrder} 
+                        className="flex-1 sm:flex-none flex items-center justify-center h-9 px-4 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Tạo đơn
+                    </button>
+                )}
             </div>
        </div>
 
@@ -215,7 +219,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                      <button onClick={() => setSelectedOrderIds(new Set())} className="text-xs text-blue-600 hover:underline">Bỏ chọn</button>
                  </div>
                  <div>
-                     {onBulkDelete && (
+                     {onBulkDelete && canDelete('orders') && (
                          <button 
                              onClick={handleBulkAction} 
                              className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded text-sm font-semibold hover:bg-red-50 shadow-sm flex items-center"
@@ -299,7 +303,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                                         {sale?.name || '-'}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        {onDeleteOrder && (
+                                        {onDeleteOrder && canDelete('orders') && (
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); onDeleteOrder(order.id); }} 
                                                 className="text-slate-400 hover:text-red-600 p-1"

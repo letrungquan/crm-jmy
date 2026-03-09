@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { supabase } from '../lib/supabaseClient';
 
 export type Module = 'leads' | 'customers' | 'orders' | 'cskh' | 'appointments' | 'revenue_schedule' | 'staff' | 'settings' | 'reports';
-export type Action = 'view' | 'create' | 'edit' | 'delete' | 'import' | 'export';
+export type Action = 'view' | 'view_all' | 'create' | 'edit' | 'delete' | 'import' | 'export' | 'manage';
 
 interface PermissionContextType {
   hasPermission: (module: Module, action: Action) => boolean;
@@ -41,6 +41,9 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         .select('role_id, roles(name, is_system)')
         .eq('user_id', session.user.id);
 
+      let roleIds: string[] = [];
+      let isSystemAdmin = false;
+
       if (userRolesError || !userRoles || userRoles.length === 0) {
         // Fallback to profiles if user_roles is empty
         const { data: profile } = await supabase
@@ -52,22 +55,23 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (profile?.role === 'admin') {
           setIsAdmin(true);
           return;
+        } else if (profile?.role) {
+          roleIds = [profile.role];
+        } else {
+          setPermissions({});
+          setIsAdmin(false);
+          return;
         }
-        setPermissions({});
-        setIsAdmin(false);
-        return;
+      } else {
+        isSystemAdmin = userRoles.some((ur: any) => ur.roles?.is_system || ur.roles?.name === 'Quản trị viên');
+        roleIds = userRoles.map(ur => ur.role_id);
       }
 
-      const isSystemAdmin = userRoles.some((ur: any) => ur.roles?.is_system || ur.roles?.name === 'Quản trị viên');
       if (isSystemAdmin) {
         setIsAdmin(true);
-        // We don't return here because we still want to load permissions if they exist,
-        // but isAdmin will override checks anyway.
       } else {
         setIsAdmin(false);
       }
-
-      const roleIds = userRoles.map(ur => ur.role_id);
 
       // 2. Lấy quyền của các vai trò
       const { data: rolePerms } = await supabase

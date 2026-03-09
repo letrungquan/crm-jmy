@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lead, Sale, Note, StatusConfig } from '../types';
 import { DOCTORS } from '../constants';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface LeadDetailModalProps {
   lead: Lead;
@@ -16,6 +17,7 @@ interface LeadDetailModalProps {
 }
 
 const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses, cskhStatuses, context = 'sales', onClose, onSave, onDelete, currentUser }) => {
+  const { canDelete, canEdit } = usePermissions();
   const [currentLead, setCurrentLead] = useState<Lead>(lead);
   const [newNote, setNewNote] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -390,7 +392,7 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
 
         <footer className="p-4 bg-slate-100 border-t border-slate-200 flex justify-between items-center">
           <div>
-            {onDelete && (
+            {onDelete && canDelete('leads') && (
                 <button 
                   onClick={handleDelete} 
                   disabled={isDeleting}
@@ -404,9 +406,11 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
             <button onClick={onClose} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50">
                 Huỷ
             </button>
-            <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                Lưu thay đổi
-            </button>
+            {canEdit('leads') && (
+                <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    Lưu thay đổi
+                </button>
+            )}
           </div>
         </footer>
       </div>

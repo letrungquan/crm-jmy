@@ -2,6 +2,7 @@
 import React from 'react';
 import { CskhItem, StatusConfig } from '../types';
 import CskhCard from './CskhCard';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface CskhViewProps {
   cskhItems: CskhItem[];
@@ -13,11 +14,13 @@ interface CskhViewProps {
 }
 
 const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhStatus, onDeleteCskh, onCustomizeStatuses, onSelectCskh }) => {
+  const { canEdit } = usePermissions();
   const [draggedOverColumn, setDraggedOverColumn] = React.useState<string | null>(null);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, statusId: string) => {
     e.preventDefault();
     setDraggedOverColumn(null);
+    if (!canEdit('cskh')) return;
     const cskhId = e.dataTransfer.getData('cskhId');
     if (cskhId) {
       onUpdateCskhStatus(cskhId, statusId);

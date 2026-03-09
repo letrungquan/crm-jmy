@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ReExamination, Sale } from '../types';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface ReExaminationViewProps {
   reExaminations: ReExamination[];
@@ -13,6 +14,7 @@ interface ReExaminationViewProps {
 }
 
 const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, sales, onUpdateStatus, onConvertToLead, onAddReExam, onSelectReExam, onDeleteReExam }) => {
+  const { canCreate, canDelete } = usePermissions();
   const [viewMode, setViewMode] = useState<'time' | 'doctor' | 'kanban'>('kanban');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active'>('active');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'week'>('all');
@@ -300,7 +302,7 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
             </div>
             
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto flex-wrap">
-                {onAddReExam && (
+                {onAddReExam && canCreate('re_exams') && (
                     <button 
                         onClick={onAddReExam}
                         className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-bold shadow-sm flex items-center justify-center"
@@ -395,7 +397,7 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
                                 ) : (
                                     <div className="text-center py-8 text-xs text-slate-400 italic">Trống</div>
                                 )}
-                                {viewMode === 'kanban' && groupTitle === 'pending' && onAddReExam && (
+                                {viewMode === 'kanban' && groupTitle === 'pending' && onAddReExam && canCreate('re_exams') && (
                                     <button 
                                         onClick={onAddReExam}
                                         className="w-full text-left text-sm text-slate-500 hover:bg-slate-200 p-2 rounded-lg flex items-center"

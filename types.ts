@@ -19,13 +19,13 @@ export interface Note {
 
 // Permission strings: "resource.action"
 export type Permission = 
-  | 'leads.view' | 'leads.create' | 'leads.edit' | 'leads.delete' | 'leads.import' | 'leads.export'
-  | 'customers.view' | 'customers.create' | 'customers.edit' | 'customers.delete' | 'customers.import' | 'customers.export'
-  | 'orders.view' | 'orders.create' | 'orders.edit' | 'orders.delete' | 'orders.import' | 'orders.export'
-  | 'cskh.view' | 'cskh.create' | 'cskh.edit' | 'cskh.delete' | 'cskh.import' | 'cskh.export'
-  | 'appointments.view' | 'appointments.create' | 'appointments.edit' | 'appointments.delete' | 'appointments.import' | 'appointments.export'
-  | 'revenue_schedule.view' | 'revenue_schedule.create' | 'revenue_schedule.edit' | 'revenue_schedule.delete' | 'revenue_schedule.import' | 'revenue_schedule.export'
-  | 'staff.view' | 'staff.create' | 'staff.edit' | 'staff.delete' | 'staff.import' | 'staff.export'
+  | 'leads.view' | 'leads.view_all' | 'leads.create' | 'leads.edit' | 'leads.delete' | 'leads.import' | 'leads.export'
+  | 'customers.view' | 'customers.view_all' | 'customers.create' | 'customers.edit' | 'customers.delete' | 'customers.import' | 'customers.export'
+  | 'orders.view' | 'orders.view_all' | 'orders.create' | 'orders.edit' | 'orders.delete' | 'orders.import' | 'orders.export'
+  | 'cskh.view' | 'cskh.view_all' | 'cskh.create' | 'cskh.edit' | 'cskh.delete' | 'cskh.import' | 'cskh.export'
+  | 'appointments.view' | 'appointments.view_all' | 'appointments.create' | 'appointments.edit' | 'appointments.delete' | 'appointments.import' | 'appointments.export'
+  | 'revenue_schedule.view' | 'revenue_schedule.view_all' | 'revenue_schedule.create' | 'revenue_schedule.edit' | 'revenue_schedule.delete' | 'revenue_schedule.import' | 'revenue_schedule.export'
+  | 'staff.view' | 'staff.manage' | 'staff.create' | 'staff.edit' | 'staff.delete' | 'staff.import' | 'staff.export'
   | 'settings.view' | 'settings.create' | 'settings.edit' | 'settings.delete' | 'settings.import' | 'settings.export'
   | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.import' | 'reports.export';
 

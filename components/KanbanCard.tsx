@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Lead, Sale } from '../types';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface KanbanCardProps {
   lead: Lead;
@@ -11,8 +12,11 @@ interface KanbanCardProps {
 }
 
 const KanbanCard: React.FC<KanbanCardProps> = ({ lead, salesperson, onClick, onAcceptLead, onDelete }) => {
+  const { canEdit } = usePermissions();
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    e.dataTransfer.setData('leadId', lead.id);
+    if (canEdit('leads')) {
+        e.dataTransfer.setData('leadId', lead.id);
+    }
   };
   
   const handleAcceptClick = (e: React.MouseEvent) => {
@@ -72,10 +76,10 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ lead, salesperson, onClick, onA
 
   return (
     <div
-      draggable="true"
+      draggable={canEdit('leads')}
       onDragStart={handleDragStart}
       onClick={onClick}
-      className="bg-white rounded-lg p-3 shadow-sm cursor-pointer border border-transparent hover:border-blue-500 group relative"
+      className={`bg-white rounded-lg p-3 shadow-sm border border-transparent hover:border-blue-500 group relative ${canEdit('leads') ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
     >
       {onDelete && (
         <button 

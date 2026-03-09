@@ -2,6 +2,7 @@
 import React from 'react';
 import { Sale } from '../types';
 import { supabase } from '../lib/supabaseClient';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface MainHeaderProps {
   onAddLead: () => void;
@@ -11,7 +12,7 @@ interface MainHeaderProps {
 }
 
 const MainHeader: React.FC<MainHeaderProps> = ({ onAddLead, onToggleSidebar, userProfile }) => {
-  
+  const { canCreate } = usePermissions();
   const handleLogout = async () => {
     // Chỉ cần gọi signOut, App.tsx sẽ lắng nghe sự kiện onAuthStateChange 
     // và tự động chuyển về màn hình Login mà không cần reload trang.
@@ -40,11 +41,13 @@ const MainHeader: React.FC<MainHeaderProps> = ({ onAddLead, onToggleSidebar, use
             </div>
         )}
 
-        <button onClick={onAddLead} className="h-9 w-9 flex items-center justify-center text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all active:scale-95" title="Thêm cơ hội mới">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-        </button>
+        {canCreate('leads') && (
+            <button onClick={onAddLead} className="h-9 w-9 flex items-center justify-center text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all active:scale-95" title="Thêm cơ hội mới">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+            </button>
+        )}
         
         <div className={`h-9 w-9 rounded-full flex items-center justify-center font-bold border-2 shadow-sm ${userProfile?.role === 'admin' ? 'bg-indigo-600 text-white border-indigo-200' : 'bg-slate-200 text-slate-600 border-white'}`} title={userProfile?.role?.toUpperCase()}>
             {userProfile?.name?.charAt(0) || 'U'}

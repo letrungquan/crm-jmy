@@ -1,6 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { CskhItem, StatusConfig } from '../types';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface CskhCardProps {
   item: CskhItem;
@@ -10,9 +11,12 @@ interface CskhCardProps {
 }
 
 const CskhCard: React.FC<CskhCardProps> = ({ item, statusConfig, onDelete, onClick }) => {
+  const { canEdit } = usePermissions();
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    e.dataTransfer.setData('cskhId', item.id);
+    if (canEdit('cskh')) {
+        e.dataTransfer.setData('cskhId', item.id);
+    }
   };
 
   const isSlaBreached = useMemo(() => {
@@ -41,9 +45,9 @@ const CskhCard: React.FC<CskhCardProps> = ({ item, statusConfig, onDelete, onCli
   return (
     <div
       onClick={onClick}
-      draggable="true"
+      draggable={canEdit('cskh')}
       onDragStart={handleDragStart}
-      className={`bg-white rounded-lg p-3 shadow-sm cursor-pointer border hover:border-blue-500 group relative ${isSlaBreached ? 'border-red-400 ring-1 ring-red-400/50' : 'border-transparent'}`}
+      className={`bg-white rounded-lg p-3 shadow-sm border hover:border-blue-500 group relative ${isSlaBreached ? 'border-red-400 ring-1 ring-red-400/50' : 'border-transparent'} ${canEdit('cskh') ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
     >
       {onDelete && (
           <button 

@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Lead, Sale, StatusConfig } from '../types';
+import { usePermissions } from '../contexts/PermissionContext';
 
 interface LeadCardProps {
   lead: Lead;
@@ -11,6 +12,7 @@ interface LeadCardProps {
 }
 
 const LeadCard: React.FC<LeadCardProps> = ({ lead, salesperson, onClick, statusConfig, onDelete }) => {
+  const { canDelete, canEdit } = usePermissions();
   // FIX: Use the passed statusConfig for dynamic colors and names, with a fallback for safety.
   const statusTheme = statusConfig?.color || { bg: 'bg-gray-100', text: 'text-gray-800' };
   const statusName = statusConfig?.name || lead.status;
@@ -22,10 +24,16 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, salesperson, onClick, statusC
 
   return (
     <div
+      draggable={canEdit('leads')}
+      onDragStart={(e) => {
+        if (canEdit('leads')) {
+            e.dataTransfer.setData('leadId', lead.id);
+        }
+      }}
       onClick={onClick}
-      className="bg-white rounded-lg shadow p-4 cursor-pointer transition-all hover:shadow-lg hover:ring-2 hover:ring-blue-500 relative group"
+      className={`bg-white rounded-lg shadow p-4 ${canEdit('leads') ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} transition-all hover:shadow-lg hover:ring-2 hover:ring-blue-500 relative group`}
     >
-      {onDelete && (
+      {onDelete && canDelete('leads') && (
         <button 
             onClick={handleDeleteClick}
             className="absolute top-2 right-2 p-1.5 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity border border-slate-100 z-10"

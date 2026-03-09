@@ -731,7 +731,13 @@ function AppContent() {
 
   // --- Auth Effect ---
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+        if (error) {
+            console.error('Error getting session:', error);
+            supabase.auth.signOut();
+            setSession(null);
+            return;
+        }
         setSession(session);
         if (session) {
             setCurrentUser(session.user.id);
@@ -750,6 +756,15 @@ function AppContent() {
     const {
         data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+        const event = _event as any;
+        if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+            setSession(null);
+            setUserProfile(null);
+            setCurrentUser('');
+            setLeads([]);
+            return;
+        }
+        
         setSession(session);
         if (session) {
             setCurrentUser(session.user.id);
@@ -757,10 +772,6 @@ function AppContent() {
                 .then(({ data }) => {
                     if (data) setUserProfile(data);
                 });
-        } else {
-            setCurrentUser('');
-            setUserProfile(null);
-            setLeads([]);
         }
     });
 
