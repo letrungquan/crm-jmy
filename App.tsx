@@ -147,13 +147,22 @@ function AppContent() {
       if (useLocalOnly) return;
       
       try {
+          let leadsQ = supabase.from('leads').select('id, name, status, created_at, updated_at, assigned_to').order('created_at', { ascending: false }).limit(15);
+          let cskhQ = supabase.from('cskh').select('id, customer_phone, status, created_at, updated_at, assigned_to').order('created_at', { ascending: false }).limit(15);
+          let ordersQ = supabase.from('orders').select('id, customer_name, revenue, status, created_at, assigned_to').order('created_at', { ascending: false }).limit(15);
+          let reExamsQ = supabase.from('re_examinations').select('id, customer_name, status, created_at, assigned_to').order('created_at', { ascending: false }).limit(15);
+          let customersQ = supabase.from('customers').select('phone, name, created_at, creator').order('created_at', { ascending: false }).limit(15);
+          let notesQ = supabase.from('notes').select('id, content, created_at, created_by, lead_id').order('created_at', { ascending: false }).limit(20);
+
+          if (!hasPermission('leads', 'view_all')) leadsQ = leadsQ.eq('assigned_to', currentUser);
+          if (!hasPermission('cskh', 'view_all')) cskhQ = cskhQ.eq('assigned_to', currentUser);
+          if (!hasPermission('orders', 'view_all')) ordersQ = ordersQ.eq('assigned_to', currentUser);
+          if (!hasPermission('appointments', 'view_all')) reExamsQ = reExamsQ.eq('assigned_to', currentUser);
+          if (!hasPermission('customers', 'view_all')) customersQ = customersQ.eq('creator', currentUser);
+          if (!hasPermission('leads', 'view_all')) notesQ = notesQ.eq('created_by', currentUser);
+
           const [leadsRes, cskhRes, ordersRes, reExamsRes, customersRes, notesRes] = await Promise.all([
-              supabase.from('leads').select('id, name, status, created_at, updated_at, assigned_to').order('created_at', { ascending: false }).limit(15),
-              supabase.from('cskh').select('id, customer_phone, status, created_at, updated_at, assigned_to').order('created_at', { ascending: false }).limit(15),
-              supabase.from('orders').select('id, customer_name, revenue, status, created_at, assigned_to').order('created_at', { ascending: false }).limit(15),
-              supabase.from('re_examinations').select('id, customer_name, status, created_at, assigned_to').order('created_at', { ascending: false }).limit(15),
-              supabase.from('customers').select('phone, name, created_at, creator').order('created_at', { ascending: false }).limit(15),
-              supabase.from('notes').select('id, content, created_at, created_by, lead_id').order('created_at', { ascending: false }).limit(20)
+              leadsQ, cskhQ, ordersQ, reExamsQ, customersQ, notesQ
           ]);
 
           const allActivities: Activity[] = [
@@ -253,7 +262,7 @@ function AppContent() {
                   potentialRevenue: data.potential_revenue,
               };
               setLeads(prev => {
-                  if (!isAdmin && formatted.assignedTo !== currentUser) {
+                  if (!hasPermission('leads', 'view_all') && formatted.assignedTo !== currentUser) {
                       return prev.filter(l => l.id !== formatted.id);
                   }
                   if (prev.find(l => l.id === formatted.id)) {
@@ -273,7 +282,7 @@ function AppContent() {
           const { data } = await supabase.from('cskh').select('*').eq('id', payload.new.id).single();
           if (data) {
               setCskhItems(prev => {
-                  if (!isAdmin && data.assigned_to !== currentUser) {
+                  if (!hasPermission('cskh', 'view_all') && data.assigned_to !== currentUser) {
                       return prev.filter(c => c.id !== data.id);
                   }
                   const existing = prev.find(c => c.id === data.id);
@@ -317,7 +326,7 @@ function AppContent() {
                   source: data.source
               };
               setOrders(prev => {
-                  if (!isAdmin && formatted.assignedTo !== currentUser) {
+                  if (!hasPermission('orders', 'view_all') && formatted.assignedTo !== currentUser) {
                       return prev.filter(o => o.id !== formatted.id);
                   }
                   if (prev.find(o => o.id === formatted.id)) return prev.map(o => o.id === formatted.id ? formatted : o);
@@ -350,7 +359,7 @@ function AppContent() {
                   updatedAt: data.updated_at
               };
               setReExaminations(prev => {
-                  if (!isAdmin && formatted.assignedTo !== currentUser) {
+                  if (!hasPermission('appointments', 'view_all') && formatted.assignedTo !== currentUser) {
                       return prev.filter(r => r.id !== formatted.id);
                   }
                   if (prev.find(r => r.id === formatted.id)) return prev.map(r => r.id === formatted.id ? formatted : r);
@@ -452,7 +461,7 @@ function AppContent() {
       return () => {
           supabase.removeChannel(channel);
       };
-  }, [useLocalOnly, session, currentUser, isAdmin]);
+  }, [useLocalOnly, session, currentUser, isAdmin, hasPermission]);
 
   // --- Helper Functions ---
   const formatErrorMessage = (err: any) => {
@@ -513,7 +522,7 @@ function AppContent() {
             *,
             notes (*)
         `);
-        if (!isAdmin) {
+        if (!hasPermission('leads', 'view_all')) {
             leadsQuery = leadsQuery.eq('assigned_to', currentUser);
         }
         const { data: leadsData, error: leadsError } = await leadsQuery.order('created_at', { ascending: false });
@@ -549,7 +558,7 @@ function AppContent() {
 
         // 3. Fetch CSKH
         let cskhQuery = supabase.from('cskh').select('*');
-        if (!isAdmin) { // Assuming CSKH uses customer permissions
+        if (!hasPermission('cskh', 'view_all')) {
             cskhQuery = cskhQuery.eq('assigned_to', currentUser);
         }
         const { data: cskhData, error: cskhError } = await cskhQuery.order('created_at', { ascending: false });
@@ -572,7 +581,7 @@ function AppContent() {
 
         // 4. Fetch Orders
         let ordersQuery = supabase.from('orders').select('*');
-        if (!isAdmin) {
+        if (!hasPermission('orders', 'view_all')) {
             ordersQuery = ordersQuery.eq('assigned_to', currentUser);
         }
         const { data: ordersData, error: ordersError } = await ordersQuery.order('created_at', { ascending: false });
@@ -594,7 +603,7 @@ function AppContent() {
         
         // 5. Fetch Re-examinations
         let reExamQuery = supabase.from('re_examinations').select('*');
-        if (!isAdmin) {
+        if (!hasPermission('appointments', 'view_all')) {
             reExamQuery = reExamQuery.eq('assigned_to', currentUser);
         }
         const { data: reExamData } = await reExamQuery;
@@ -657,7 +666,11 @@ function AppContent() {
 
         // Enriched Customer Data
         try {
-            const { data: customerDetails } = await supabase.from('customers').select('*');
+            let customersQuery = supabase.from('customers').select('*');
+            if (!hasPermission('customers', 'view_all')) {
+                customersQuery = customersQuery.eq('creator', currentUser);
+            }
+            const { data: customerDetails } = await customersQuery;
             if (customerDetails) {
                 customerDetails.forEach(c => {
                      const existing = customerMap.get(c.phone);
@@ -675,6 +688,26 @@ function AppContent() {
                              profileCompleteness: c.profile_completeness,
                              source: c.source,
                              assignedTo: c.assigned_to || existing.assignedTo
+                         });
+                     } else {
+                         customerMap.set(c.phone, {
+                             name: c.name,
+                             phone: c.phone,
+                             leads: [],
+                             orders: [],
+                             generalNotes: '',
+                             tags: [],
+                             email: c.email,
+                             address: c.address,
+                             location: c.location,
+                             customerGroup: c.customer_group,
+                             relationshipStatus: c.relationship_status,
+                             gender: c.gender,
+                             dateOfBirth: c.date_of_birth,
+                             occupation: c.occupation,
+                             profileCompleteness: c.profile_completeness,
+                             source: c.source,
+                             assignedTo: c.assigned_to
                          });
                      }
                 });
@@ -727,7 +760,7 @@ function AppContent() {
     } finally {
         setIsRefreshing(false);
     }
-  }, [session, useLocalOnly, localLeads, localCskh, localOrders, localReExams, currentUser, isAdmin]);
+  }, [session, useLocalOnly, localLeads, localCskh, localOrders, localReExams, currentUser, isAdmin, hasPermission]);
 
   // --- Auth Effect ---
   useEffect(() => {
