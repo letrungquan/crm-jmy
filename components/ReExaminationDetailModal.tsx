@@ -178,7 +178,7 @@ const ReExaminationDetailModal: React.FC<ReExaminationDetailModalProps> = ({ reE
 
         <footer className="p-4 bg-slate-50 flex justify-between items-center border-t border-slate-100 shrink-0 rounded-b-lg">
           <div>
-            {onDelete && canDelete('re_exams') && (
+            {onDelete && canDelete('appointments') && (
                 <button 
                     type="button"
                     onClick={onDelete} 
@@ -192,7 +192,7 @@ const ReExaminationDetailModal: React.FC<ReExaminationDetailModalProps> = ({ reE
               <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50">
                 Huỷ
               </button>
-              {canEdit('re_exams') && (
+              {canEdit('appointments') && (
                   <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-bold shadow-sm">
                     Lưu thay đổi
                   </button>

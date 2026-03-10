@@ -20,6 +20,7 @@ import OrderList from './components/OrderList';
 import SaleDashboard from './components/SaleDashboard';
 import ReportsView from './components/ReportsView';
 import SettingsView from './components/SettingsView';
+import UserGuideView from './components/UserGuideView';
 
 // Modals
 import LeadDetailModal from './components/LeadDetailModal';
@@ -2008,6 +2009,10 @@ function AppContent() {
                     isAdmin={isAdmin}
                     canEdit={hasPermission('settings', 'edit')}
                 />
+            )}
+
+            {activeView === 'guide' && (
+                <UserGuideView />
             )}
         </main>
       </div>
