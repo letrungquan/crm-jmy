@@ -88,6 +88,7 @@ export interface CskhItem {
   updatedAt: string;
   doctorName?: string; // Added field for Doctor
   reExaminationDate?: string | null; // Added for Re-examination Schedule
+  note?: string; // Added field for customer feedback note
 }
 
 export interface ReExamination {

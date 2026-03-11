@@ -17,8 +17,8 @@ interface AddressUnit {
     full_name: string;
 }
 
-const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy'];
-const DEFAULT_CUSTOMER_GROUPS = ['VIP', 'Thân thiết', 'Tiềm năng', 'Vãng lai'];
+const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'Hủy'];
+const DEFAULT_CUSTOMER_GROUPS = ['Thân thiết', 'Tiềm năng', 'Vãng lai'];
 
 const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, relationships = DEFAULT_RELATIONSHIPS, customerGroups = DEFAULT_CUSTOMER_GROUPS, sources = [], onClose, onSave }) => {
   const [formData, setFormData] = useState<CustomerData>({

@@ -790,6 +790,30 @@ ALTER TABLE re_examinations ADD CONSTRAINT re_examinations_customer_phone_fkey F
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_customer_phone_fkey;
 ALTER TABLE orders ADD CONSTRAINT orders_customer_phone_fkey FOREIGN KEY (customer_phone) REFERENCES customers(phone) ON DELETE CASCADE;
 
+-- Create CSKH table
+CREATE TABLE IF NOT EXISTS cskh (
+  id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  customer_phone text REFERENCES customers(phone) ON DELETE CASCADE,
+  service text,
+  status text,
+  assigned_to uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  original_lead_id text REFERENCES leads(id) ON DELETE SET NULL,
+  doctor_name text,
+  re_examination_date timestamptz,
+  note text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE cskh ADD COLUMN IF NOT EXISTS doctor_name text;
+ALTER TABLE cskh ADD COLUMN IF NOT EXISTS re_examination_date timestamptz;
+ALTER TABLE cskh ADD COLUMN IF NOT EXISTS note text;
+
+ALTER TABLE cskh ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public_Cskh" ON cskh;
+CREATE POLICY "Public_Cskh" ON cskh FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE cskh TO anon, authenticated, service_role;
+
 ALTER TABLE cskh DROP CONSTRAINT IF EXISTS cskh_customer_phone_fkey;
 ALTER TABLE cskh ADD CONSTRAINT cskh_customer_phone_fkey FOREIGN KEY (customer_phone) REFERENCES customers(phone) ON DELETE CASCADE;
 

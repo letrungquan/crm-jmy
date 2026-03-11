@@ -12,11 +12,12 @@ interface LeadDetailModalProps {
   context?: 'sales' | 'cskh';
   onClose: () => void;
   onSave: (updatedLead: Lead) => void;
+  onAddNote: (leadId: string, content: string) => void;
   onDelete?: () => void;
   currentUser: Sale['id'];
 }
 
-const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses, cskhStatuses, context = 'sales', onClose, onSave, onDelete, currentUser }) => {
+const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses, cskhStatuses, context = 'sales', onClose, onSave, onAddNote, onDelete, currentUser }) => {
   const { canDelete, canEdit } = usePermissions();
   const [currentLead, setCurrentLead] = useState<Lead>(lead);
   const [newNote, setNewNote] = useState('');
@@ -27,8 +28,8 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
   const [feedbackRating, setFeedbackRating] = useState(5);
 
   useEffect(() => {
-    setCurrentLead(lead);
-  }, [lead]);
+    setCurrentLead(prev => ({ ...prev, notes: lead.notes }));
+  }, [lead.notes]);
   
   const isCskh = context === 'cskh';
   const isAppointmentStatus = ['scheduled', 'completed'].includes(currentLead.status);
@@ -66,13 +67,7 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
         finalContent = `[PHẢN HỒI] [${feedbackRating} Sao] ${finalContent}`;
     }
 
-    const note: Note = {
-      id: `note_${Date.now()}`,
-      content: finalContent,
-      createdAt: new Date().toISOString(),
-      createdBy: currentUser,
-    };
-    setCurrentLead(prev => ({ ...prev, notes: [note, ...prev.notes], updatedAt: new Date().toISOString() }));
+    onAddNote(lead.id, finalContent);
     setNewNote('');
     setIsFeedback(false);
     setFeedbackRating(5);

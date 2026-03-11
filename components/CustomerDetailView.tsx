@@ -50,7 +50,7 @@ const KpiCard: React.FC<{ label: string; value: React.ReactNode; subValue?: stri
     </div>
 );
 
-const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'VIP', 'Hủy'];
+const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'Hủy'];
 
 const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales, statuses, cskhItems, relationships = DEFAULT_RELATIONSHIPS, sources = [], onClose, onSelectLead, onUpdateCustomer, onEdit, onDelete, onAddNote, currentUser, isAdmin, onAddReExam }) => {
     const [activeTab, setActiveTab] = useState('trao_doi');

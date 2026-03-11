@@ -156,23 +156,38 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
        </div>
 
        {/* Statistics Cards */}
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-           <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-               <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Doanh thu (Hiện tại)</p>
-               <p className="text-2xl font-bold text-green-600 mt-1">{formatCurrency(stats.totalRevenue)}</p>
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+           <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 flex items-center justify-between">
+               <div>
+                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Doanh thu (Hiện tại)</p>
+                   <p className="text-lg font-bold text-green-600 mt-0.5">{formatCurrency(stats.totalRevenue)}</p>
+               </div>
+               <div className="p-2 bg-green-50 rounded-full">
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+               </div>
            </div>
-           <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-               <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Tổng đơn hàng</p>
-               <p className="text-2xl font-bold text-slate-800 mt-1">{stats.count}</p>
+           <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 flex items-center justify-between">
+               <div>
+                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Tổng đơn hàng</p>
+                   <p className="text-lg font-bold text-slate-800 mt-0.5">{stats.count}</p>
+               </div>
+               <div className="p-2 bg-blue-50 rounded-full">
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+               </div>
            </div>
-           <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-               <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Đơn hoàn thành</p>
-               <p className="text-2xl font-bold text-blue-600 mt-1">{stats.successCount}</p>
+           <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 flex items-center justify-between">
+               <div>
+                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Đơn hoàn thành</p>
+                   <p className="text-lg font-bold text-blue-600 mt-0.5">{stats.successCount}</p>
+               </div>
+               <div className="p-2 bg-indigo-50 rounded-full">
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+               </div>
            </div>
        </div>
 
        {/* Filters & Search */}
-       <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row gap-4">
+       <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row gap-3">
            <div className="flex-1 relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -238,7 +253,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                 <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50">
                         <tr>
-                            <th scope="col" className="px-6 py-3 text-left w-10">
+                            <th scope="col" className="px-3 py-2 text-left w-10">
                                 <input 
                                     type="checkbox" 
                                     checked={selectedOrderIds.size === filteredOrders.length && filteredOrders.length > 0}
@@ -246,18 +261,18 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                                     className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                                 />
                             </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Mã Đơn</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Khách hàng</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Dịch vụ</th>
-                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Doanh thu</th>
-                            <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Ngày tạo</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nguồn</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Phụ trách</th>
-                            <th scope="col" className="relative px-6 py-3"><span className="sr-only">Hành động</span></th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Mã Đơn</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Khách hàng</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Dịch vụ</th>
+                            <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Doanh thu</th>
+                            <th scope="col" className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Ngày tạo</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nguồn</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Phụ trách</th>
+                            <th scope="col" className="relative px-3 py-2"><span className="sr-only">Hành động</span></th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-slate-200">
+                    <tbody className="bg-white divide-y divide-slate-100">
                         {paginatedOrders.length > 0 ? paginatedOrders.map((order) => {
                             const customer = customers[order.customerPhone];
                             const sale = sales.find(s => s.id === order.assignedTo);
@@ -265,7 +280,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                             
                             return (
                                 <tr key={order.id} className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}>
-                                    <td className="px-6 py-4">
+                                    <td className="px-3 py-2">
                                         <input 
                                             type="checkbox" 
                                             checked={isSelected}
@@ -273,43 +288,46 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                                             className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
                                         />
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                                    <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-blue-600">
                                         {order.externalId ? (
                                             <span title={`ID Hệ thống: ${order.id}`}>{order.externalId}</span>
                                         ) : (
                                             <span>{order.id.slice(0, 8).toUpperCase()}</span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-3 py-2 whitespace-nowrap">
                                         <div className="text-sm font-bold text-slate-900">{customer?.name || order.customerName || order.customerPhone}</div>
                                         <div className="text-xs text-slate-500">{order.customerPhone}</div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 max-w-[150px] truncate" title={order.service}>
+                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-700 max-w-[150px] truncate" title={order.service}>
                                         {order.service}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-slate-800">
+                                    <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-bold text-slate-800">
                                         {formatCurrency(order.revenue)}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                    <td className="px-3 py-2 whitespace-nowrap text-center">
                                         <StatusBadge status={order.status} />
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                        {formatDate(order.createdAt)}
+                                    <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-500">
+                                        <div className="flex flex-col">
+                                            <span>{new Date(order.createdAt).toLocaleDateString('vi-VN')}</span>
+                                            <span className="text-slate-400">{new Date(order.createdAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}</span>
+                                        </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-3 py-2 whitespace-nowrap">
                                         <SourceBadge source={order.source} />
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-500">
                                         {sale?.name || '-'}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
                                         {onDeleteOrder && canDelete('orders') && (
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); onDeleteOrder(order.id); }} 
                                                 className="text-slate-400 hover:text-red-600 p-1"
                                                 title="Xóa đơn hàng"
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                 </svg>
                                             </button>

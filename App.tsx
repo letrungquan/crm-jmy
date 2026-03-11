@@ -298,7 +298,8 @@ function AppContent() {
                       createdAt: data.created_at,
                       updatedAt: data.updated_at,
                       doctorName: data.doctor_name,
-                      reExaminationDate: data.re_examination_date
+                      reExaminationDate: data.re_examination_date,
+                      note: data.note
                   };
                   if (existing) return prev.map(c => c.id === formatted.id ? formatted : c);
                   return [formatted, ...prev];
@@ -576,7 +577,8 @@ function AppContent() {
             createdAt: c.created_at,
             updatedAt: c.updated_at,
             doctorName: c.doctor_name,
-            reExaminationDate: c.re_examination_date
+            reExaminationDate: c.re_examination_date,
+            note: c.note
         }));
         setCskhItems(formattedCskh);
 
@@ -934,14 +936,18 @@ function AppContent() {
 
       try {
           // 1. Đảm bảo khách hàng tồn tại trước khi tạo đơn (tránh lỗi Foreign Key)
-          const { error: custError } = await supabase.from('customers').upsert({
+          const { error: custError } = await supabase.from('customers').insert([{
               phone: newOrder.customerPhone,
               name: newOrder.customerName || 'Khách hàng',
               source: 'manual',
-              relationship_status: 'Chốt đơn'
-          }, { onConflict: 'phone', ignoreDuplicates: true });
+              relationship_status: 'Chốt đơn',
+              creator: currentUser,
+              assigned_to: currentUser
+          }]);
           
-          if (custError) console.warn("Lỗi tạo khách hàng cho đơn:", custError);
+          if (custError && custError.code !== '23505') {
+              throw new Error(`Lỗi dữ liệu khách hàng: ${custError.message}`);
+          }
 
           const { error } = await supabase.from('orders').insert([{
               customer_phone: newOrder.customerPhone,
@@ -1207,6 +1213,30 @@ function AppContent() {
     }
   };
 
+  const handleReceiveLead = async (id: string) => {
+      if (!hasPermission('leads', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC NHẬN CƠ HỘI."); return; }
+      
+      const prevLeads = [...leads];
+      const now = new Date().toISOString();
+      const nextStatus = statuses.find(s => s.id === 'contacting') ? 'contacting' : (statuses[1]?.id || 'new');
+      
+      // Update local state first for optimistic UI
+      setLeads(current => current.map(l => l.id === id ? { ...l, assignedTo: currentUser, status: nextStatus, updatedAt: now } : l));
+
+      if (useLocalOnly) {
+          setLocalLeads(prev => prev.map(l => l.id === id ? { ...l, assignedTo: currentUser, status: nextStatus, updatedAt: now } : l));
+          return;
+      }
+
+      try {
+          const { error } = await supabase.from('leads').update({ assigned_to: currentUser, status: nextStatus, updated_at: now }).eq('id', id);
+          if (error) throw error;
+      } catch(err) { 
+          setLeads(prevLeads);
+          alert(formatErrorMessage(err)); 
+      }
+  };
+
   const executeLeadCompletion = async (data: { actualRevenue: number; actualService: string; note: string; doctorName: string; reExaminationDate: string; reExamService?: string; reExamNote?: string; reExamRevenue?: number }) => {
       if (!leadToComplete) return;
       const targetLead = leadToComplete;
@@ -1288,7 +1318,9 @@ function AppContent() {
           if (leadError) throw leadError;
 
           if (updatedNoteContent) {
+              const noteId = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
               await supabase.from('notes').insert([{
+                  id: noteId,
                   lead_id: targetLead.id,
                   content: updatedNoteContent,
                   created_by: currentUser
@@ -1325,8 +1357,10 @@ function AppContent() {
 
       } catch (err) { 
           alert(formatErrorMessage(err));
-          fetchData(true); 
-      } finally { setIsRefreshing(false); }
+      } finally { 
+          setIsRefreshing(false); 
+          fetchData(true);
+      }
   };
 
   const handleUpdateCskhStatus = async (cskhId: string, newStatusId: string) => {
@@ -1353,8 +1387,44 @@ function AppContent() {
       const now = new Date().toISOString();
       const itemToSave = { ...updatedItem, updatedAt: now };
       
+      const originalItem = cskhItems.find(item => item.id === itemToSave.id);
+      const noteChanged = itemToSave.note && itemToSave.note !== originalItem?.note;
+      
       setCskhItems(prev => prev.map(item => item.id === itemToSave.id ? itemToSave : item));
       setSelectedCskh(null);
+
+      if (noteChanged && itemToSave.originalLeadId) {
+          const noteId = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const newNote = {
+              id: noteId,
+              content: `[CSKH] ${itemToSave.note}`,
+              createdAt: now,
+              createdBy: currentUser
+          };
+          setLeads(prev => prev.map(l => l.id === itemToSave.originalLeadId ? { ...l, notes: [newNote, ...l.notes] } : l));
+          
+          // Update customers state to keep interaction history in sync
+          setCustomers(prev => prev.map(c => ({
+              ...c,
+              leads: c.leads.map(l => l.id === itemToSave.originalLeadId ? { ...l, notes: [newNote, ...l.notes] } : l)
+          })));
+          
+          if (useLocalOnly) {
+              setLocalLeads(prev => prev.map(l => l.id === itemToSave.originalLeadId ? { ...l, notes: [newNote, ...l.notes] } : l));
+          } else {
+              try {
+                  const { error } = await supabase.from('notes').insert([{
+                      id: noteId,
+                      lead_id: itemToSave.originalLeadId,
+                      content: `[CSKH] ${itemToSave.note}`,
+                      created_by: currentUser
+                  }]);
+                  if (error) console.error("Lỗi khi lưu ghi chú CSKH:", error);
+              } catch (err) {
+                  console.error("Lỗi khi lưu ghi chú CSKH:", err);
+              }
+          }
+      }
 
       if (useLocalOnly) {
           setLocalCskh(prev => prev.map(item => item.id === itemToSave.id ? itemToSave : item));
@@ -1367,12 +1437,15 @@ function AppContent() {
               assigned_to: itemToSave.assignedTo,
               doctor_name: itemToSave.doctorName,
               re_examination_date: itemToSave.reExaminationDate,
+              note: itemToSave.note,
               updated_at: now
           }).eq('id', itemToSave.id);
           
           if (error) throw error;
+          fetchData(true);
       } catch (err) {
           alert(formatErrorMessage(err));
+          fetchData(true);
       }
   };
 
@@ -1477,6 +1550,19 @@ function AppContent() {
       }
 
       try {
+          // Đảm bảo khách hàng tồn tại trước khi tạo lịch tái khám (tránh lỗi Foreign Key)
+          const { error: custError } = await supabase.from('customers').insert([{
+              phone: data.customerPhone,
+              name: data.customerName || 'Khách hàng',
+              source: 'manual',
+              creator: currentUser,
+              assigned_to: data.assignedTo || currentUser
+          }]);
+          
+          if (custError && custError.code !== '23505') {
+              throw new Error(`Lỗi dữ liệu khách hàng: ${custError.message}`);
+          }
+
           const { error } = await supabase.from('re_examinations').insert([{
               id: newReExam.id,
               customer_phone: data.customerPhone,
@@ -1706,8 +1792,9 @@ function AppContent() {
   const handleAddNoteToLead = async (leadId: string, content: string) => {
       if (!hasPermission('leads', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM GHI CHÚ CHO CƠ HỘI."); return; }
       const now = new Date().toISOString();
+      const noteId = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const newNote: Note = {
-          id: `note_${Date.now()}`,
+          id: noteId,
           content,
           createdAt: now,
           createdBy: currentUser
@@ -1720,6 +1807,12 @@ function AppContent() {
           return l;
       }));
 
+      // Update customers state to keep interaction history in sync
+      setCustomers(prev => prev.map(c => ({
+          ...c,
+          leads: c.leads.map(l => l.id === leadId ? { ...l, notes: [newNote, ...l.notes] } : l)
+      })));
+
       if (useLocalOnly) {
            setLocalLeads(prev => prev.map(l => l.id === leadId ? { ...l, notes: [newNote, ...l.notes] } : l));
            return;
@@ -1727,6 +1820,7 @@ function AppContent() {
 
       try {
           const { error } = await supabase.from('notes').insert([{
+              id: noteId,
               lead_id: leadId,
               content: content,
               created_by: currentUser
@@ -1759,6 +1853,19 @@ function AppContent() {
     }
     
     try {
+        // Đảm bảo khách hàng tồn tại trước khi tạo lead (tránh lỗi Foreign Key)
+        const { error: custError } = await supabase.from('customers').insert([{
+            phone: leadData.phone,
+            name: leadData.name || 'Khách hàng',
+            source: leadData.source || 'manual',
+            creator: currentUser,
+            assigned_to: leadData.assignedTo || currentUser
+        }]);
+        
+        if (custError && custError.code !== '23505') {
+            throw new Error(`Lỗi dữ liệu khách hàng: ${custError.message}`);
+        }
+
         const { error } = await supabase.from('leads').insert([{
             id: newLeadId,
             name: leadData.name,
@@ -1812,20 +1919,6 @@ function AppContent() {
           
           if (error) throw error;
           
-          // Save any new notes that were added optimistically
-          const newNotes = leadToSave.notes.filter(n => n.id.startsWith('note_'));
-          if (newNotes.length > 0) {
-              const { error: notesError } = await supabase.from('notes').insert(
-                  newNotes.map(n => ({
-                      lead_id: leadToSave.id,
-                      content: n.content,
-                      created_by: n.createdBy,
-                      created_at: n.createdAt
-                  }))
-              );
-              if (notesError) console.error("Error saving notes:", notesError);
-          }
-          
           fetchData(true);
       } catch (err) {
           alert(formatErrorMessage(err));
@@ -1863,6 +1956,7 @@ function AppContent() {
             sales={sales}
             onSelectLead={setSelectedLead}
             onSelectCskh={setSelectedCskh}
+            onReceiveLead={handleReceiveLead}
         />
       );
   };
@@ -1911,7 +2005,7 @@ function AppContent() {
                     onSelectLead={setSelectedLead}
                     onUpdateLeadStatus={handleUpdateLeadStatus}
                     onAddLead={() => setIsAddLeadModalOpen(true)}
-                    onAcceptLead={() => {}} 
+                    onAcceptLead={handleReceiveLead} 
                     onDeleteLead={executeDeleteLead}
                     sources={sources}
                     selectedSource={selectedSource}
@@ -1964,6 +2058,8 @@ function AppContent() {
                     onDeleteCustomer={handleDeleteCustomer}
                     onBulkDelete={handleBulkDeleteCustomers}
                     sources={sources}
+                    relationships={relationships}
+                    customerGroups={customerGroups}
                     sales={sales}
                 />
             )}
@@ -2025,6 +2121,7 @@ function AppContent() {
                   statuses={statuses}
                   cskhItems={cskhItems.filter(c => c.customerPhone === selectedCustomer.phone)}
                   sources={sources}
+                  relationships={relationships}
                   onClose={() => setSelectedCustomer(null)}
                   onSelectLead={(lead) => {
                       setSelectedCustomer(null);
@@ -2116,8 +2213,16 @@ function AppContent() {
               item={selectedCskh}
               sales={sales}
               statuses={cskhStatuses}
+              notes={leads.find(l => l.id === selectedCskh.originalLeadId)?.notes || []}
               onClose={() => setSelectedCskh(null)}
               onSave={handleUpdateCskhItem}
+              onAddNote={(content) => {
+                  if (selectedCskh.originalLeadId) {
+                      handleAddNoteToLead(selectedCskh.originalLeadId, `[CSKH] ${content}`);
+                  } else {
+                      alert("CSKH này không liên kết với cơ hội nào.");
+                  }
+              }}
               onViewCustomer={(phone) => {
                   setSelectedCskh(null);
                   const customer = customers.find(c => c.phone === phone);
@@ -2125,6 +2230,7 @@ function AppContent() {
                   else alert("Không tìm thấy thông tin khách hàng này.");
               }}
               onDelete={() => setDeleteCskhTarget(selectedCskh.id)}
+              currentUser={currentUser}
           />
       )}
 
@@ -2133,6 +2239,8 @@ function AppContent() {
           <CustomerFormModal 
               customerToEdit={customerToEdit}
               sources={sources}
+              relationships={relationships}
+              customerGroups={customerGroups}
               onClose={() => setIsCustomerFormOpen(false)}
               onSave={(data) => {
                   if (customerToEdit) {
@@ -2193,6 +2301,7 @@ function AppContent() {
               cskhStatuses={cskhStatuses}
               onClose={() => setSelectedLead(null)}
               onSave={handleUpdateLead}
+              onAddNote={handleAddNoteToLead}
               currentUser={currentUser}
               onDelete={() => executeDeleteLead(selectedLead.id)}
           />
