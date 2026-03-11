@@ -228,34 +228,63 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, reExaminations = [],
                     )}
                   </div>
                   <div className="mt-1 sm:mt-2 space-y-1.5 overflow-y-auto flex-1">
-                    {dailyLeads.map(lead => {
-                      const isScheduled = ['scheduled', 'completed'].includes(lead.status);
-                      const theme = {
-                          bg: isScheduled ? 'bg-blue-100' : 'bg-orange-100',
-                          text: isScheduled ? 'text-blue-800' : 'text-orange-800',
-                          border: isScheduled ? 'border-blue-200' : 'border-orange-200',
-                          hoverBg: isScheduled ? 'hover:bg-blue-200' : 'hover:bg-orange-200',
-                      };
+                    {(() => {
+                      const allEvents = [
+                        ...dailyLeads.map(lead => ({ type: 'lead' as const, data: lead })),
+                        ...dailyReExams.map(reExam => ({ type: 'reExam' as const, data: reExam }))
+                      ];
+                      
+                      const MAX_VISIBLE = 2;
+                      const visibleEvents = allEvents.length <= 3 ? allEvents : allEvents.slice(0, MAX_VISIBLE);
+                      const hiddenEvents = allEvents.length <= 3 ? [] : allEvents.slice(MAX_VISIBLE);
+
                       return (
-                      <div 
-                        key={lead.id} onClick={() => onSelectLead(lead)}
-                        className={`p-1 sm:p-1.5 text-xs ${theme.bg} ${theme.text} rounded-md cursor-pointer ${theme.hoverBg} border ${theme.border}`}
-                        title={`${lead.name} - ${formatCurrency(lead.potentialRevenue!)}`}
-                      >
-                        <p className="font-semibold truncate">{lead.name}</p>
-                        <p className="hidden sm:block truncate">{formatCurrency(lead.potentialRevenue!)}</p>
-                      </div>
-                    )})}
-                    {dailyReExams.map(reExam => (
-                        <div 
-                            key={reExam.id}
-                            className="p-1 sm:p-1.5 text-xs bg-purple-100 text-purple-800 rounded-md border border-purple-200"
-                            title={`Tái khám: ${reExam.customerName} - ${formatCurrency(reExam.potentialRevenue!)}`}
-                        >
-                            <p className="font-semibold truncate">TK: {reExam.customerName}</p>
-                            <p className="hidden sm:block truncate">{formatCurrency(reExam.potentialRevenue!)}</p>
-                        </div>
-                    ))}
+                        <>
+                          {visibleEvents.map(event => {
+                            if (event.type === 'lead') {
+                              const lead = event.data as Lead;
+                              const isScheduled = ['scheduled', 'completed'].includes(lead.status);
+                              const theme = {
+                                  bg: isScheduled ? 'bg-blue-100' : 'bg-orange-100',
+                                  text: isScheduled ? 'text-blue-800' : 'text-orange-800',
+                                  border: isScheduled ? 'border-blue-200' : 'border-orange-200',
+                                  hoverBg: isScheduled ? 'hover:bg-blue-200' : 'hover:bg-orange-200',
+                              };
+                              return (
+                                <div 
+                                  key={lead.id} onClick={() => onSelectLead(lead)}
+                                  className={`p-1 sm:p-1.5 text-xs ${theme.bg} ${theme.text} rounded-md cursor-pointer ${theme.hoverBg} border ${theme.border}`}
+                                  title={`${lead.name} - ${formatCurrency(lead.potentialRevenue!)}`}
+                                >
+                                  <p className="font-semibold truncate">{lead.name}</p>
+                                  <p className="hidden sm:block truncate">{formatCurrency(lead.potentialRevenue!)}</p>
+                                </div>
+                              );
+                            } else {
+                              const reExam = event.data as ReExamination;
+                              return (
+                                <div 
+                                    key={reExam.id}
+                                    className="p-1 sm:p-1.5 text-xs bg-purple-100 text-purple-800 rounded-md border border-purple-200"
+                                    title={`Tái khám: ${reExam.customerName} - ${formatCurrency(reExam.potentialRevenue!)}`}
+                                >
+                                    <p className="font-semibold truncate">{reExam.customerName}</p>
+                                    <p className="hidden sm:block truncate">{formatCurrency(reExam.potentialRevenue!)}</p>
+                                </div>
+                              );
+                            }
+                          })}
+                          {hiddenEvents.length > 0 && (
+                            <div 
+                              className="p-1 sm:p-1.5 text-xs bg-slate-100 text-slate-600 rounded-md border border-slate-200 text-center font-medium cursor-help"
+                              title={hiddenEvents.map(e => e.type === 'lead' ? `${(e.data as Lead).name} - ${formatCurrency((e.data as Lead).potentialRevenue!)}` : `Tái khám: ${(e.data as ReExamination).customerName} - ${formatCurrency((e.data as ReExamination).potentialRevenue!)}`).join('\n')}
+                            >
+                              +{hiddenEvents.length} lịch hẹn
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -332,7 +361,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, reExaminations = [],
                                     {dailyReExams.map(reExam => (
                                         <div key={reExam.id} className="p-2.5 text-sm bg-purple-50 text-purple-800 rounded-lg border border-purple-300 flex justify-between items-center">
                                             <div>
-                                                <p className="font-bold truncate">Tái khám: {reExam.customerName}</p>
+                                                <p className="font-bold truncate">{reExam.customerName}</p>
                                                 <p className="text-xs truncate text-slate-500 mt-0.5">{reExam.service}</p>
                                             </div>
                                             <div className="text-right flex-shrink-0 ml-2">
