@@ -9,13 +9,19 @@ interface ReExaminationDetailModalProps {
   sales: Sale[];
   onClose: () => void;
   onSave: (updatedReExam: ReExamination) => void;
+  onAddNote: (reExamId: string, content: string) => void;
   onDelete?: () => void;
 }
 
-const ReExaminationDetailModal: React.FC<ReExaminationDetailModalProps> = ({ reExam, sales, onClose, onSave, onDelete }) => {
+const ReExaminationDetailModal: React.FC<ReExaminationDetailModalProps> = ({ reExam, sales, onClose, onSave, onAddNote, onDelete }) => {
   const { canDelete, canEdit } = usePermissions();
   const [currentReExam, setCurrentReExam] = useState<ReExamination>(reExam);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  
+  // Feedback state
+  const [isFeedback, setIsFeedback] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(5);
 
   useEffect(() => {
     setCurrentReExam(reExam);
@@ -32,6 +38,20 @@ const ReExaminationDetailModal: React.FC<ReExaminationDetailModalProps> = ({ reE
 
   const handleSave = () => {
     onSave(currentReExam);
+  };
+
+  const handleAddNote = () => {
+    if (newNote.trim() === '') return;
+    
+    let finalContent = newNote.trim();
+    if (isFeedback) {
+        finalContent = `[PHẢN HỒI] [${feedbackRating} Sao] ${finalContent}`;
+    }
+
+    onAddNote(reExam.id, finalContent);
+    setNewNote('');
+    setIsFeedback(false);
+    setFeedbackRating(5);
   };
 
   // Helper to format date for date-only input (YYYY-MM-DD)
@@ -171,6 +191,88 @@ const ReExaminationDetailModal: React.FC<ReExaminationDetailModalProps> = ({ reE
                 ></textarea>
             </div>
             
+            {/* Notes History Section */}
+            <div className="mt-6 border-t pt-4">
+              <h3 className="text-lg font-semibold text-slate-700 mb-2">Lịch sử tương tác</h3>
+              <div className="space-y-3">
+                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                     <div className="flex items-center justify-between mb-2">
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                              <input 
+                                  type="checkbox" 
+                                  checked={isFeedback} 
+                                  onChange={(e) => setIsFeedback(e.target.checked)}
+                                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                              />
+                              <span className="text-sm font-bold text-slate-700">Ghi nhận phản hồi</span>
+                          </label>
+                          {isFeedback && (
+                              <div className="flex space-x-1">
+                                  {[1, 2, 3, 4, 5].map(star => (
+                                      <button key={star} onClick={() => setFeedbackRating(star)} className="focus:outline-none" type="button">
+                                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${star <= feedbackRating ? 'text-yellow-400' : 'text-slate-300'}`} viewBox="0 0 20 20" fill="currentColor">
+                                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                          </svg>
+                                      </button>
+                                  ))}
+                              </div>
+                          )}
+                     </div>
+                     <div className="flex space-x-2">
+                       <textarea
+                         value={newNote}
+                         onChange={(e) => setNewNote(e.target.value)}
+                         placeholder={isFeedback ? "Nhập nội dung phản hồi của khách hàng..." : "Thêm ghi chú tương tác..."}
+                         rows={2}
+                         className="flex-grow px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                       ></textarea>
+                       <button onClick={handleAddNote} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 font-bold" disabled={!newNote.trim()}>
+                          Gửi
+                       </button>
+                     </div>
+                 </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-3 pr-2">
+                   {(currentReExam.notes || []).length > 0 ? (
+                      (currentReExam.notes || []).map(note => {
+                        const creator = sales.find(s => s.id === note.createdBy);
+                        const isFeedbackNote = note.content.includes('[PHẢN HỒI]');
+                        let displayContent = note.content;
+                        let rating = 0;
+                        
+                        if (isFeedbackNote) {
+                            const parts = note.content.match(/\[(\d+) Sao\] (.*)/);
+                            if (parts) {
+                                rating = parseInt(parts[1]);
+                                displayContent = parts[2];
+                            } else {
+                                displayContent = note.content.replace('[PHẢN HỒI]', '');
+                            }
+                        }
+
+                        return (
+                        <div key={note.id} className={`p-3 rounded-md border ${isFeedbackNote ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-slate-200'}`}>
+                          <div className="flex justify-between items-center text-xs mb-1">
+                            <span className="font-semibold text-slate-800">{creator?.name || 'Hệ thống'}</span>
+                            <span className="text-slate-400">{new Date(note.createdAt).toLocaleString('vi-VN')}</span>
+                          </div>
+                          {isFeedbackNote && rating > 0 && (
+                              <div className="flex text-yellow-400 mb-1">
+                                  {[...Array(rating)].map((_, i) => (
+                                      <svg key={i} xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                                  ))}
+                              </div>
+                          )}
+                          <p className={`text-sm ${isFeedbackNote ? 'text-slate-800 italic' : 'text-slate-700'}`}>{displayContent}</p>
+                        </div>
+                      )})
+                   ) : (
+                      <p className="text-sm text-slate-400 text-center py-4">Chưa có ghi chú nào.</p>
+                   )}
+                 </div>
+              </div>
+            </div>
+
             <div className="text-xs text-slate-400 pt-4 border-t border-slate-100">
                 <p>Ngày tạo: {new Date(currentReExam.createdAt).toLocaleString('vi-VN')}</p>
             </div>

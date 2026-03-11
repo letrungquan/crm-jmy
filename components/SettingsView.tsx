@@ -823,6 +823,7 @@ CREATE TABLE IF NOT EXISTS re_examinations (
   customer_phone text NOT NULL, -- Keep loose reference to allow flexibility
   customer_name text,
   date date NOT NULL,
+  appointment_time text,
   service text,
   doctor_name text,
   assigned_to text, -- Can store UUID string
@@ -838,8 +839,23 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name text;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS external_id text;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS source text;
 
+-- Add columns to notes table for unified interaction history
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS customer_phone text;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS cskh_id text;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS re_examination_id text;
+
+ALTER TABLE notes DROP CONSTRAINT IF EXISTS notes_cskh_id_fkey;
+ALTER TABLE notes ADD CONSTRAINT notes_cskh_id_fkey FOREIGN KEY (cskh_id) REFERENCES cskh(id) ON DELETE CASCADE;
+
+ALTER TABLE notes DROP CONSTRAINT IF EXISTS notes_re_examination_id_fkey;
+ALTER TABLE notes ADD CONSTRAINT notes_re_examination_id_fkey FOREIGN KEY (re_examination_id) REFERENCES re_examinations(id) ON DELETE CASCADE;
+
+ALTER TABLE notes DROP CONSTRAINT IF EXISTS notes_customer_phone_fkey;
+ALTER TABLE notes ADD CONSTRAINT notes_customer_phone_fkey FOREIGN KEY (customer_phone) REFERENCES customers(phone) ON DELETE CASCADE;
+
 -- Add potential_revenue column if it doesn't exist
 ALTER TABLE re_examinations ADD COLUMN IF NOT EXISTS potential_revenue numeric;
+ALTER TABLE re_examinations ADD COLUMN IF NOT EXISTS appointment_time text;
 
 -- Enable RLS
 ALTER TABLE re_examinations ENABLE ROW LEVEL SECURITY;

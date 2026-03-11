@@ -11,7 +11,7 @@ interface CustomerDetailViewProps {
   onUpdateCustomer: (phone: string, data: Partial<Customer>) => void;
   onEdit: (customer: Customer) => void;
   onDelete: (phone: string) => void;
-  onAddNote: (leadId: string, noteContent: string) => void;
+  onAddNote: (leadId: string | null, noteContent: string, customerPhone: string) => void;
   currentUser: Sale['id'];
 }
 
@@ -47,19 +47,35 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
     const { canDelete, canEdit } = usePermissions();
     const [activeTab, setActiveTab] = useState('trao_doi');
     const [newNote, setNewNote] = useState('');
-    const [selectedLeadForNote, setSelectedLeadForNote] = useState<string>('');
+    const [selectedLeadForNote, setSelectedLeadForNote] = useState<string>('none');
 
     useEffect(() => {
         if (customer.leads.length > 0) {
             setSelectedLeadForNote(customer.leads[0].id);
+        } else {
+            setSelectedLeadForNote('none');
         }
     }, [customer.leads]);
 
-    const allNotes = useMemo(() => 
-        customer.leads.flatMap(lead => 
-            lead.notes.map(note => ({ ...note, leadService: lead.service, leadId: lead.id }))
-        ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), 
-    [customer.leads]);
+    const allNotes = useMemo(() => {
+        const notes: any[] = [];
+        
+        // Add notes from leads
+        customer.leads.forEach(lead => {
+            lead.notes.forEach(note => {
+                notes.push({ ...note, leadService: lead.service, leadId: lead.id });
+            });
+        });
+        
+        // Add general customer notes if they exist in a separate array
+        if (customer.notes) {
+            customer.notes.forEach(note => {
+                notes.push({ ...note, leadService: 'Ghi chú chung', leadId: null });
+            });
+        }
+        
+        return notes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }, [customer.leads, customer.notes]);
 
     const interactionCount = allNotes.length;
 
@@ -91,15 +107,11 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
     }, [customer.leads]);
 
     const handleAddNote = () => {
-        if (!newNote.trim() || !selectedLeadForNote) {
-            if (customer.leads.length === 0) {
-                alert("Khách hàng này chưa có cơ hội nào. Vui lòng tạo cơ hội trước khi thêm ghi chú.");
-            } else {
-                alert("Vui lòng viết ghi chú và chọn một cơ hội.");
-            }
+        if (!newNote.trim()) {
+            alert("Vui lòng viết ghi chú.");
             return;
         }
-        onAddNote(selectedLeadForNote, newNote);
+        onAddNote(selectedLeadForNote === 'none' ? null : selectedLeadForNote, newNote, customer.phone);
         setNewNote('');
     };
 
@@ -238,16 +250,15 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                         onChange={(e) => setNewNote(e.target.value)}
                                      ></textarea>
                                     <div className="flex justify-between items-center pt-2 mt-2 border-t flex-wrap gap-2">
-                                        {customer.leads.length > 0 && (
-                                            <div className="flex items-center text-sm">
-                                                <span className="text-slate-500 mr-2">Lưu vào cơ hội:</span>
-                                                <select value={selectedLeadForNote} onChange={(e) => setSelectedLeadForNote(e.target.value)} className="bg-white border-slate-200 rounded-md p-1 focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                                    {customer.leads.map(lead => (
-                                                        <option key={lead.id} value={lead.id}>{lead.service || `Cơ hội ngày ${new Date(lead.createdAt).toLocaleDateString()}`}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        )}
+                                        <div className="flex items-center text-sm">
+                                            <span className="text-slate-500 mr-2">Gắn vào cơ hội:</span>
+                                            <select value={selectedLeadForNote} onChange={(e) => setSelectedLeadForNote(e.target.value)} className="bg-white border-slate-200 rounded-md p-1 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                                <option value="none">-- Không gắn --</option>
+                                                {customer.leads.map(lead => (
+                                                    <option key={lead.id} value={lead.id}>{lead.service || `Cơ hội ngày ${new Date(lead.createdAt).toLocaleDateString()}`}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                         <button onClick={handleAddNote} className="px-5 py-2 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700 disabled:bg-blue-300" disabled={!newNote.trim()}>Gửi</button>
                                     </div>
                                 </div>
@@ -264,7 +275,11 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                                         <span className="text-slate-400">{new Date(note.createdAt).toLocaleString('vi-VN')}</span>
                                                     </div>
                                                     <p className="text-sm text-slate-600 mt-1">{note.content}</p>
-                                                     <p className="text-xs text-blue-500 font-medium truncate mt-2 cursor-pointer hover:underline" title={note.leadService} onClick={() => onSelectLead(customer.leads.find(l => l.id === note.leadId)!)}>Trong cơ hội: {note.leadService}</p>
+                                                     {note.leadId ? (
+                                                        <p className="text-xs text-blue-500 font-medium truncate mt-2 cursor-pointer hover:underline" title={note.leadService} onClick={() => onSelectLead(customer.leads.find(l => l.id === note.leadId)!)}>Trong cơ hội: {note.leadService}</p>
+                                                     ) : (
+                                                        <p className="text-xs text-slate-400 font-medium truncate mt-2">Ghi chú chung</p>
+                                                     )}
                                                 </div>
                                             </div>
                                         )

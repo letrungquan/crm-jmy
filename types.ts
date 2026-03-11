@@ -89,6 +89,7 @@ export interface CskhItem {
   doctorName?: string; // Added field for Doctor
   reExaminationDate?: string | null; // Added for Re-examination Schedule
   note?: string; // Added field for customer feedback note
+  notes?: Note[]; // Interaction history
 }
 
 export interface ReExamination {
@@ -101,6 +102,7 @@ export interface ReExamination {
   doctorName?: string;
   assignedTo?: string; // Sale phụ trách
   note?: string;
+  notes?: Note[]; // Added for discussion history
   status: 'pending' | 'called' | 'completed' | 'cancelled' | 'converted'; // pending=Cần gọi, called=Đã gọi, completed=Hoàn thành
   createdAt: string;
   updatedAt?: string;

@@ -566,20 +566,27 @@ function AppContent() {
         const { data: cskhData, error: cskhError } = await cskhQuery.order('created_at', { ascending: false });
         if (cskhError) throw cskhError;
         
-        const formattedCskh: CskhItem[] = (cskhData || []).map(c => ({
-            id: c.id,
-            customerPhone: c.customer_phone,
-            customerName: formattedLeads.find(l => l.phone === c.customer_phone)?.name || 'Khách hàng',
-            service: c.service,
-            status: c.status,
-            assignedTo: c.assigned_to,
-            originalLeadId: c.original_lead_id,
-            createdAt: c.created_at,
-            updatedAt: c.updated_at,
-            doctorName: c.doctor_name,
-            reExaminationDate: c.re_examination_date,
-            note: c.note
-        }));
+        const formattedCskh: CskhItem[] = (cskhData || []).map(c => {
+            const originalLead = formattedLeads.find(l => l.id === c.original_lead_id) || formattedLeads.find(l => l.phone === c.customer_phone);
+            const leadNotes = originalLead?.notes || [];
+            const combinedNotes = [...leadNotes].sort((a: Note, b: Note) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+            return {
+                id: c.id,
+                customerPhone: c.customer_phone,
+                customerName: originalLead?.name || 'Khách hàng',
+                service: c.service,
+                status: c.status,
+                assignedTo: c.assigned_to,
+                originalLeadId: c.original_lead_id,
+                createdAt: c.created_at,
+                updatedAt: c.updated_at,
+                doctorName: c.doctor_name,
+                reExaminationDate: c.re_examination_date,
+                note: c.note,
+                notes: combinedNotes
+            };
+        });
         setCskhItems(formattedCskh);
 
         // 4. Fetch Orders
@@ -610,20 +617,38 @@ function AppContent() {
             reExamQuery = reExamQuery.eq('assigned_to', currentUser);
         }
         const { data: reExamData } = await reExamQuery;
-        const formattedReExams: ReExamination[] = (reExamData || []).map(r => ({
-           id: r.id,
-           customerPhone: r.customer_phone,
-           customerName: r.customer_name,
-           date: r.date,
-           appointmentTime: r.appointment_time,
-           service: r.service,
-           doctorName: r.doctor_name,
-           assignedTo: r.assigned_to,
-           note: r.note,
-           status: r.status,
-           createdAt: r.created_at,
-           potentialRevenue: r.potential_revenue
-        }));
+        const formattedReExams: ReExamination[] = (reExamData || []).map(r => {
+            const originalLead = formattedLeads.find(l => l.phone === r.customer_phone);
+            const leadNotes = originalLead?.notes || [];
+            
+            // Also find CSKH notes if any
+            const cskhItem = formattedCskh.find(c => c.customerPhone === r.customer_phone);
+            const cskhNotes = cskhItem?.notes || [];
+            
+            // Combine all notes and sort by date descending
+            // Use a Map to ensure uniqueness by ID
+            const allNotesMap = new Map();
+            [...leadNotes, ...cskhNotes].forEach(note => {
+                allNotesMap.set(note.id, note);
+            });
+            const combinedNotes = Array.from(allNotesMap.values()).sort((a: Note, b: Note) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+            return {
+               id: r.id,
+               customerPhone: r.customer_phone,
+               customerName: r.customer_name,
+               date: r.date,
+               appointmentTime: r.appointment_time,
+               service: r.service,
+               doctorName: r.doctor_name,
+               assignedTo: r.assigned_to,
+               note: r.note,
+               status: r.status,
+               createdAt: r.created_at,
+               potentialRevenue: r.potential_revenue,
+               notes: combinedNotes
+            };
+        });
         setReExaminations(formattedReExams);
 
         // 6. Fetch Activities
@@ -1345,6 +1370,7 @@ function AppContent() {
                   customer_phone: targetLead.phone,
                   customer_name: targetLead.name,
                   date: reExaminationDate,
+                  appointment_time: null,
                   service: reExamService || actualService,
                   doctor_name: doctorName,
                   assigned_to: targetLead.assignedTo,
@@ -1789,6 +1815,86 @@ function AppContent() {
       }
   };
 
+  const handleAddNoteToCskh = async (cskhId: string, content: string) => {
+      if (!hasPermission('cskh', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM GHI CHÚ CHO CSKH."); return; }
+      const now = new Date().toISOString();
+      const noteId = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newNote: Note = {
+          id: noteId,
+          content,
+          createdAt: now,
+          createdBy: currentUser
+      };
+
+      const cskhItem = cskhItems.find(c => c.id === cskhId);
+      const leadId = cskhItem?.originalLeadId || leads.find(l => l.phone === cskhItem?.customerPhone)?.id;
+
+      setCskhItems(prev => prev.map(c => {
+          if (c.id === cskhId) {
+              return { ...c, notes: [newNote, ...(c.notes || [])] };
+          }
+          return c;
+      }));
+      
+      if (leadId) {
+          setLeads(prev => prev.map(l => l.id === leadId ? { ...l, notes: [newNote, ...l.notes] } : l));
+      }
+
+      if (useLocalOnly) return;
+
+      try {
+          const { error } = await supabase.from('notes').insert([{
+              id: noteId,
+              lead_id: leadId || null,
+              content: content,
+              created_by: currentUser
+          }]);
+          if (error) throw error;
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
+  };
+
+  const handleAddNoteToReExam = async (reExamId: string, content: string) => {
+      if (!hasPermission('appointments', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM GHI CHÚ CHO LỊCH TÁI KHÁM."); return; }
+      const now = new Date().toISOString();
+      const noteId = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newNote: Note = {
+          id: noteId,
+          content,
+          createdAt: now,
+          createdBy: currentUser
+      };
+
+      const reExam = reExaminations.find(r => r.id === reExamId);
+      const leadId = leads.find(l => l.phone === reExam?.customerPhone)?.id;
+
+      setReExaminations(prev => prev.map(r => {
+          if (r.id === reExamId) {
+              return { ...r, notes: [newNote, ...(r.notes || [])] };
+          }
+          return r;
+      }));
+      
+      if (leadId) {
+          setLeads(prev => prev.map(l => l.id === leadId ? { ...l, notes: [newNote, ...l.notes] } : l));
+      }
+
+      if (useLocalOnly) return;
+
+      try {
+          const { error } = await supabase.from('notes').insert([{
+              id: noteId,
+              lead_id: leadId || null,
+              content: content,
+              created_by: currentUser
+          }]);
+          if (error) throw error;
+      } catch (err) {
+          alert(formatErrorMessage(err));
+      }
+  };
+
   const handleAddNoteToLead = async (leadId: string, content: string) => {
       if (!hasPermission('leads', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM GHI CHÚ CHO CƠ HỘI."); return; }
       const now = new Date().toISOString();
@@ -2120,6 +2226,7 @@ function AppContent() {
                   sales={sales}
                   statuses={statuses}
                   cskhItems={cskhItems.filter(c => c.customerPhone === selectedCustomer.phone)}
+                  reExaminations={reExaminations.filter(r => r.customerPhone === selectedCustomer.phone)}
                   sources={sources}
                   relationships={relationships}
                   onClose={() => setSelectedCustomer(null)}
@@ -2134,6 +2241,8 @@ function AppContent() {
                   }}
                   onDelete={handleDeleteCustomer}
                   onAddNote={handleAddNoteToLead}
+                  onAddNoteToCskh={handleAddNoteToCskh}
+                  onAddNoteToReExam={handleAddNoteToReExam}
                   currentUser={currentUser}
                   isAdmin={userProfile?.role === 'admin'}
                   onAddReExam={() => {
@@ -2178,6 +2287,7 @@ function AppContent() {
               onClose={() => setSelectedReExam(null)}
               onSave={handleUpdateReExam}
               onDelete={() => setDeleteReExamTarget(selectedReExam.id)}
+              onAddNote={handleAddNoteToReExam}
           />
       )}
 
@@ -2213,15 +2323,11 @@ function AppContent() {
               item={selectedCskh}
               sales={sales}
               statuses={cskhStatuses}
-              notes={leads.find(l => l.id === selectedCskh.originalLeadId)?.notes || []}
+              notes={selectedCskh.notes || []}
               onClose={() => setSelectedCskh(null)}
               onSave={handleUpdateCskhItem}
               onAddNote={(content) => {
-                  if (selectedCskh.originalLeadId) {
-                      handleAddNoteToLead(selectedCskh.originalLeadId, `[CSKH] ${content}`);
-                  } else {
-                      alert("CSKH này không liên kết với cơ hội nào.");
-                  }
+                  handleAddNoteToCskh(selectedCskh.id, content);
               }}
               onViewCustomer={(phone) => {
                   setSelectedCskh(null);

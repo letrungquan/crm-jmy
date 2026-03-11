@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Customer, Sale, StatusConfig, Lead, CustomerData, CskhItem } from '../types';
+import { Customer, Sale, StatusConfig, Lead, CustomerData, CskhItem, ReExamination } from '../types';
 
 interface CustomerDetailViewProps {
   customer: Customer;
   sales: Sale[];
   statuses: StatusConfig[];
   cskhItems: CskhItem[];
+  reExaminations?: ReExamination[];
   relationships?: string[];
   sources?: string[];
   onClose: () => void;
@@ -15,6 +16,8 @@ interface CustomerDetailViewProps {
   onEdit: (customer: Customer) => void;
   onDelete?: (phone: string) => void;
   onAddNote: (leadId: string, noteContent: string) => void;
+  onAddNoteToCskh?: (cskhId: string, content: string) => void;
+  onAddNoteToReExam?: (reExamId: string, content: string) => void;
   currentUser: Sale['id'];
   isAdmin: boolean;
   onAddReExam?: () => void;
@@ -52,10 +55,10 @@ const KpiCard: React.FC<{ label: string; value: React.ReactNode; subValue?: stri
 
 const DEFAULT_RELATIONSHIPS = ['Mới', 'Tiềm năng', 'Quan tâm', 'Chốt đơn', 'Hủy'];
 
-const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales, statuses, cskhItems, relationships = DEFAULT_RELATIONSHIPS, sources = [], onClose, onSelectLead, onUpdateCustomer, onEdit, onDelete, onAddNote, currentUser, isAdmin, onAddReExam }) => {
+const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales, statuses, cskhItems, reExaminations = [], relationships = DEFAULT_RELATIONSHIPS, sources = [], onClose, onSelectLead, onUpdateCustomer, onEdit, onDelete, onAddNote, onAddNoteToCskh, onAddNoteToReExam, currentUser, isAdmin, onAddReExam }) => {
     const [activeTab, setActiveTab] = useState('trao_doi');
     const [newNote, setNewNote] = useState('');
-    const [selectedLeadForNote, setSelectedLeadForNote] = useState<string>('');
+    const [selectedTargetForNote, setSelectedTargetForNote] = useState<string>('');
     const [relationship, setRelationship] = useState((!customer.relationshipStatus || customer.relationshipStatus === 'Mới') && customer.orders?.length > 0 ? 'Chốt đơn' : (customer.relationshipStatus || relationships[0]));
     const [source, setSource] = useState(customer.source || '');
     
@@ -63,11 +66,21 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
     const [feedbackRating, setFeedbackRating] = useState(5);
     const [feedbackText, setFeedbackText] = useState('');
 
+    const noteTargets = useMemo(() => {
+        const targets = [];
+        customer.leads.forEach(lead => targets.push({ id: `lead_${lead.id}`, label: `Cơ hội: ${lead.service || new Date(lead.createdAt).toLocaleDateString()}` }));
+        cskhItems.forEach(cskh => targets.push({ id: `cskh_${cskh.id}`, label: `CSKH: ${cskh.service || new Date(cskh.createdAt).toLocaleDateString()}` }));
+        reExaminations.forEach(reExam => targets.push({ id: `reExam_${reExam.id}`, label: `Lịch tái khám: ${reExam.service || new Date(reExam.date).toLocaleDateString()}` }));
+        return targets;
+    }, [customer.leads, cskhItems, reExaminations]);
+
     useEffect(() => {
-        if (customer.leads.length > 0) {
-            setSelectedLeadForNote(customer.leads[0].id);
+        if (noteTargets.length > 0 && !selectedTargetForNote) {
+            setSelectedTargetForNote(noteTargets[0].id);
+        } else if (noteTargets.length === 0) {
+            setSelectedTargetForNote('');
         }
-    }, [customer.leads]);
+    }, [noteTargets, selectedTargetForNote]);
 
     useEffect(() => {
         setRelationship((!customer.relationshipStatus || customer.relationshipStatus === 'Mới') && customer.orders?.length > 0 ? 'Chốt đơn' : (customer.relationshipStatus || relationships[0]));
@@ -86,11 +99,27 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
         onUpdateCustomer(customer.phone, { source: newSource });
     };
 
-    const allNotes = useMemo(() => 
-        customer.leads.flatMap(lead => 
-            lead.notes.map(note => ({ ...note, leadService: lead.service, leadId: lead.id }))
-        ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), 
-    [customer.leads]);
+    const allNotes = useMemo(() => {
+        const leadNotes = customer.leads.flatMap(lead => 
+            lead.notes.map(note => ({ ...note, leadService: lead.service, leadId: lead.id, source: 'lead' }))
+        );
+        const cskhNotes = cskhItems.flatMap(cskh => 
+            (cskh.notes || []).map(note => ({ ...note, cskhService: cskh.service, cskhId: cskh.id, source: 'cskh' }))
+        );
+        const reExamNotes = reExaminations.flatMap(reExam => 
+            (reExam.notes || []).map(note => ({ ...note, reExamService: reExam.service, reExamId: reExam.id, source: 'reExam' }))
+        );
+        
+        // Combine and deduplicate by note ID
+        const notesMap = new Map();
+        [...leadNotes, ...cskhNotes, ...reExamNotes].forEach(note => {
+            if (!notesMap.has(note.id)) {
+                notesMap.set(note.id, note);
+            }
+        });
+        
+        return Array.from(notesMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }, [customer.leads, cskhItems, reExaminations]);
 
     // Aggregate diverse timeline items
     const timelineItems = useMemo(() => {
@@ -108,8 +137,15 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
             date: item.createdAt
         }));
 
-        return [...notes, ...cskhEvents].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [allNotes, cskhItems]);
+        const reExamEvents = reExaminations.map(item => ({
+            type: 'reExam' as const,
+            id: item.id,
+            data: item,
+            date: item.createdAt
+        }));
+
+        return [...notes, ...cskhEvents, ...reExamEvents].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [allNotes, cskhItems, reExaminations]);
 
     const feedbackList = useMemo(() => 
         allNotes.filter(n => n.content.includes('[PHẢN HỒI]')),
@@ -155,25 +191,45 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
     }, [orders]);
 
     const handleAddNote = () => {
-        if (!newNote.trim() || !selectedLeadForNote) {
-            if (customer.leads.length === 0) {
-                alert("Khách hàng này chưa có cơ hội nào. Vui lòng tạo cơ hội trước khi thêm ghi chú.");
+        if (!newNote.trim() || !selectedTargetForNote) {
+            if (noteTargets.length === 0) {
+                alert("Khách hàng này chưa có cơ hội, CSKH hoặc lịch tái khám nào. Vui lòng tạo trước khi thêm ghi chú.");
             } else {
-                alert("Vui lòng viết ghi chú và chọn một cơ hội.");
+                alert("Vui lòng viết ghi chú và chọn một mục tiêu.");
             }
             return;
         }
-        onAddNote(selectedLeadForNote, newNote);
+        
+        const [type, id] = selectedTargetForNote.split('_');
+        
+        if (type === 'lead') {
+            onAddNote(id, newNote);
+        } else if (type === 'cskh' && onAddNoteToCskh) {
+            onAddNoteToCskh(id, newNote);
+        } else if (type === 'reExam' && onAddNoteToReExam) {
+            onAddNoteToReExam(id, newNote);
+        }
+        
         setNewNote('');
     };
 
     const handleAddFeedback = () => {
-        if (!feedbackText.trim() || !selectedLeadForNote) {
-             alert("Vui lòng nhập nội dung phản hồi và chọn cơ hội liên quan.");
+        if (!feedbackText.trim() || !selectedTargetForNote) {
+             alert("Vui lòng nhập nội dung phản hồi và chọn mục tiêu liên quan.");
              return;
         }
         const content = `[PHẢN HỒI] [${feedbackRating} Sao] ${feedbackText}`;
-        onAddNote(selectedLeadForNote, content);
+        
+        const [type, id] = selectedTargetForNote.split('_');
+        
+        if (type === 'lead') {
+            onAddNote(id, content);
+        } else if (type === 'cskh' && onAddNoteToCskh) {
+            onAddNoteToCskh(id, content);
+        } else if (type === 'reExam' && onAddNoteToReExam) {
+            onAddNoteToReExam(id, content);
+        }
+        
         setFeedbackText('');
         setFeedbackRating(5);
     };
@@ -409,12 +465,12 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                         onChange={(e) => setNewNote(e.target.value)}
                                      ></textarea>
                                     <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex justify-between items-center flex-wrap gap-3">
-                                        {customer.leads.length > 0 && (
+                                        {noteTargets.length > 0 && (
                                             <div className="flex items-center text-sm">
-                                                <span className="text-slate-500 mr-2">Gắn vào cơ hội:</span>
-                                                <select value={selectedLeadForNote} onChange={(e) => setSelectedLeadForNote(e.target.value)} className="bg-white border border-slate-300 rounded text-slate-700 text-sm py-1 pl-2 pr-6">
-                                                    {customer.leads.map(lead => (
-                                                        <option key={lead.id} value={lead.id}>{lead.service || `Cơ hội ${new Date(lead.createdAt).toLocaleDateString()}`}</option>
+                                                <span className="text-slate-500 mr-2">Gắn vào:</span>
+                                                <select value={selectedTargetForNote} onChange={(e) => setSelectedTargetForNote(e.target.value)} className="bg-white border border-slate-300 rounded text-slate-700 text-sm py-1 pl-2 pr-6 max-w-[250px] truncate">
+                                                    {noteTargets.map(target => (
+                                                        <option key={target.id} value={target.id}>{target.label}</option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -437,7 +493,9 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                                             <span className="text-slate-400">{new Date(note.createdAt).toLocaleString('vi-VN')}</span>
                                                         </div>
                                                         <p className="text-sm text-slate-600">{note.content}</p>
-                                                        {note.leadService && <p className="text-[10px] text-blue-500 font-bold mt-2 truncate">Cơ hội: {note.leadService}</p>}
+                                                        {note.source === 'lead' && note.leadService && <p className="text-[10px] text-blue-500 font-bold mt-2 truncate">Cơ hội: {note.leadService}</p>}
+                                                        {note.source === 'cskh' && note.cskhService && <p className="text-[10px] text-purple-500 font-bold mt-2 truncate">CSKH: {note.cskhService}</p>}
+                                                        {note.source === 'reExam' && note.reExamService && <p className="text-[10px] text-orange-500 font-bold mt-2 truncate">Lịch tái khám: {note.reExamService}</p>}
                                                     </div>
                                                 </div>
                                             );
@@ -463,6 +521,31 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                                         <div className="mt-2 flex items-center justify-between">
                                                             <span className="text-xs text-slate-500">Phụ trách: {creator?.name || 'Chưa gán'}</span>
                                                             <span className="px-2 py-0.5 bg-white rounded border border-purple-100 text-[10px] text-purple-600 font-bold uppercase">{cskh.status.replace('cskh_', '')}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        } else if (item.type === 'reExam') {
+                                            const reExam = item.data;
+                                            const creator = sales.find(s => s.id === reExam.assignedTo);
+                                            return (
+                                                <div key={`reExam-${item.id}-${idx}`} className="flex items-start space-x-3 opacity-90">
+                                                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-sm font-bold text-orange-600 flex-shrink-0 border border-orange-200">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1 bg-orange-50 p-3 rounded-lg border border-orange-200 shadow-sm">
+                                                        <div className="flex justify-between items-center text-xs mb-1">
+                                                            <span className="font-bold text-orange-800">Lịch tái khám</span>
+                                                            <span className="text-orange-600">{new Date(reExam.createdAt).toLocaleString('vi-VN')}</span>
+                                                        </div>
+                                                        <p className="text-sm text-slate-700">
+                                                            Tạo lịch tái khám cho dịch vụ: <strong>{reExam.service}</strong>
+                                                        </p>
+                                                        <div className="mt-2 flex items-center justify-between">
+                                                            <span className="text-xs text-slate-500">Phụ trách: {creator?.name || 'Chưa gán'}</span>
+                                                            <span className="px-2 py-0.5 bg-white rounded border border-orange-100 text-[10px] text-orange-600 font-bold uppercase">{reExam.status}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -588,10 +671,10 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                     </div>
                                     <textarea value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} className="w-full p-3 border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 text-sm mb-4" rows={3} placeholder="Nội dung phản hồi..."></textarea>
                                     <div className="flex justify-between items-center">
-                                         {customer.leads.length > 0 && (
-                                            <select value={selectedLeadForNote} onChange={(e) => setSelectedLeadForNote(e.target.value)} className="bg-white border border-slate-300 rounded text-xs p-1.5 max-w-[200px]">
-                                                {customer.leads.map(lead => (
-                                                    <option key={lead.id} value={lead.id}>{lead.service}</option>
+                                         {noteTargets.length > 0 && (
+                                            <select value={selectedTargetForNote} onChange={(e) => setSelectedTargetForNote(e.target.value)} className="bg-white border border-slate-300 rounded text-xs p-1.5 max-w-[200px] truncate">
+                                                {noteTargets.map(target => (
+                                                    <option key={target.id} value={target.id}>{target.label}</option>
                                                 ))}
                                             </select>
                                         )}
