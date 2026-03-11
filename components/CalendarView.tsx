@@ -80,16 +80,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, reExaminations = [],
     
     const filteredLeads = leads.filter(lead => {
         const leadDate = getLeadDate(lead);
-        if (!leadDate || !lead.potentialRevenue) return false;
+        if (!leadDate) return false;
+        if (lead.status === 'cancelled') return false;
         return leadDate.getFullYear() === currentDate.getFullYear() &&
                leadDate.getMonth() === currentDate.getMonth();
     });
 
     const filteredReExams = reExaminations.filter(reExam => {
         const reExamDate = getReExamDate(reExam);
-        if (!reExamDate || !reExam.potentialRevenue) return false;
-        // Only include pending or called re-exams for forecast
-        if (!['pending', 'called'].includes(reExam.status)) return false;
+        if (!reExamDate) return false;
+        if (reExam.status === 'cancelled') return false;
         return reExamDate.getFullYear() === currentDate.getFullYear() &&
                reExamDate.getMonth() === currentDate.getMonth();
     });
@@ -108,14 +108,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, reExaminations = [],
 
     const filteredLeads = leads.filter(lead => {
         const date = getLeadDate(lead);
-        if (!date || !lead.potentialRevenue) return false;
+        if (!date) return false;
+        if (lead.status === 'cancelled') return false;
         return date >= start && date <= end;
     });
 
     const filteredReExams = reExaminations.filter(reExam => {
         const date = getReExamDate(reExam);
-        if (!date || !reExam.potentialRevenue) return false;
-        if (!['pending', 'called'].includes(reExam.status)) return false;
+        if (!date) return false;
+        if (reExam.status === 'cancelled') return false;
         return date >= start && date <= end;
     });
 
