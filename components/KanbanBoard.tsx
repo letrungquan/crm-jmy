@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Lead, Sale, StatusConfig } from '../types';
 import KanbanCard from './KanbanCard';
 import { usePermissions } from '../contexts/PermissionContext';
@@ -16,7 +16,6 @@ interface KanbanBoardProps {
   sources: string[];
   selectedSource: string;
   onSourceChange: (source: string) => void;
-  onCustomizeStatuses: () => void;
   selectedSale: string;
   onSaleChange: (saleId: string) => void;
 }
@@ -33,12 +32,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   sources,
   selectedSource,
   onSourceChange,
-  onCustomizeStatuses,
   selectedSale,
   onSaleChange
 }) => {
   const { canCreate, canEdit } = usePermissions();
   const [draggedOverColumn, setDraggedOverColumn] = React.useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, statusId: string) => {
     e.preventDefault();
@@ -59,9 +60,28 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
     setDraggedOverColumn(null);
   };
 
+  const filteredLeads = leads.filter(lead => {
+    if (!searchQuery) return true;
+    const lowerQuery = searchQuery.toLowerCase();
+    return (
+      lead.name.toLowerCase().includes(lowerQuery) ||
+      lead.phone.includes(lowerQuery) ||
+      (lead.service && lead.service.toLowerCase().includes(lowerQuery))
+    );
+  }).sort((a, b) => {
+    const dateA = new Date(a.createdAt).getTime();
+    const dateB = new Date(b.createdAt).getTime();
+    return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+  });
+
+  const toggleSortOrder = () => {
+    setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+  };
+
   return (
     <div className="h-full flex flex-col">
-      <div className="px-4 pt-4 flex items-center flex-wrap gap-4">
+      <div className="px-4 pt-4 flex items-center flex-wrap gap-4 justify-between">
+        <div className="flex items-center flex-wrap gap-4">
           <div className="flex items-center">
             <label htmlFor="source-filter" className="text-sm font-medium text-slate-600 mr-2">Nguồn:</label>
             <select
@@ -94,72 +114,151 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               ))}
             </select>
           </div>
-          <button 
-            onClick={onCustomizeStatuses}
-            className="flex items-center text-sm text-blue-600 font-semibold hover:bg-blue-50 p-2 rounded-lg"
+          <div className="flex items-center">
+            <input
+              type="text"
+              placeholder="Tìm kiếm tên, SĐT, dịch vụ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900 w-64"
+            />
+          </div>
+        </div>
+        <div className="flex bg-slate-100 p-1 rounded-lg">
+          <button
+            onClick={() => setViewMode('kanban')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Tùy chỉnh trạng thái
+            Kanban
           </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+          >
+            Danh sách
+          </button>
+        </div>
       </div>
-      <div className="flex-1 flex overflow-x-auto p-2 sm:p-4 space-x-2 sm:space-x-4">
-        {statuses.map(statusConfig => {
-          const leadsInStatus = leads.filter(lead => lead.status === statusConfig.id);
-          const statusTheme = statusConfig.color;
-          
-          return (
-            <div
-              key={statusConfig.id}
-              onDrop={(e) => handleDrop(e, statusConfig.id)}
-              onDragOver={(e) => handleDragOver(e, statusConfig.id)}
-              onDragLeave={handleDragLeave}
-              className={`flex-shrink-0 w-72 sm:w-80 h-full flex flex-col rounded-xl transition-colors ${draggedOverColumn === statusConfig.id ? 'bg-blue-50' : ''}`}
-            >
-              <div className={`flex items-center justify-between p-3 rounded-t-xl ${statusTheme.bg}`}>
-                  <div className="flex items-center">
-                      <span className={`text-sm font-bold ${statusTheme.text}`}>{statusConfig.name}</span>
-                      <span className="ml-2 text-xs font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full">{leadsInStatus.length}</span>
-                  </div>
-                  <button className="text-slate-500 hover:text-slate-700">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
-                      </svg>
-                  </button>
-              </div>
 
-              <div className={`p-2 space-y-3 overflow-y-auto flex-1 ${statusTheme.bg}`}>
-                {leadsInStatus.map(lead => {
+      {viewMode === 'kanban' ? (
+        <div className="flex-1 flex overflow-x-auto p-2 sm:p-4 space-x-2 sm:space-x-4">
+          {statuses.map(statusConfig => {
+            const leadsInStatus = filteredLeads.filter(lead => lead.status === statusConfig.id);
+            const statusTheme = statusConfig.color;
+            
+            return (
+              <div
+                key={statusConfig.id}
+                onDrop={(e) => handleDrop(e, statusConfig.id)}
+                onDragOver={(e) => handleDragOver(e, statusConfig.id)}
+                onDragLeave={handleDragLeave}
+                className={`flex-shrink-0 w-72 sm:w-80 h-full flex flex-col rounded-xl transition-colors ${draggedOverColumn === statusConfig.id ? 'bg-blue-50' : ''}`}
+              >
+                <div className={`flex items-center justify-between p-3 rounded-t-xl ${statusTheme.bg}`}>
+                    <div className="flex items-center">
+                        <span className={`text-sm font-bold ${statusTheme.text}`}>{statusConfig.name}</span>
+                        <span className="ml-2 text-xs font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full">{leadsInStatus.length}</span>
+                    </div>
+                </div>
+
+                <div className={`p-2 space-y-3 overflow-y-auto flex-1 ${statusTheme.bg}`}>
+                  {leadsInStatus.map(lead => {
+                    const salesperson = sales.find(s => s.id === lead.assignedTo);
+                    return (
+                      <KanbanCard
+                        key={lead.id}
+                        lead={lead}
+                        salesperson={salesperson}
+                        onClick={() => onSelectLead(lead)}
+                        onAcceptLead={onAcceptLead}
+                        onDelete={onDeleteLead ? () => onDeleteLead(lead.id) : undefined}
+                      />
+                    );
+                  })}
+                  {canCreate('leads') && (
+                    <button 
+                      onClick={() => onAddLead(statusConfig.id)}
+                      className="w-full text-left text-sm text-slate-500 hover:bg-slate-200 p-2 rounded-lg flex items-center"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Thêm mới
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto p-4">
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Khách hàng</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Dịch vụ</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Sale phụ trách</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Doanh thu dự kiến</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nguồn</th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100"
+                    onClick={toggleSortOrder}
+                  >
+                    <div className="flex items-center">
+                      Ngày tạo
+                      <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ml-1 transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-slate-200">
+                {filteredLeads.map(lead => {
+                  const statusConfig = statuses.find(s => s.id === lead.status);
                   const salesperson = sales.find(s => s.id === lead.assignedTo);
                   return (
-                    <KanbanCard
-                      key={lead.id}
-                      lead={lead}
-                      salesperson={salesperson}
-                      onClick={() => onSelectLead(lead)}
-                      onAcceptLead={onAcceptLead}
-                      onDelete={onDeleteLead ? () => onDeleteLead(lead.id) : undefined}
-                    />
+                    <tr key={lead.id} onClick={() => onSelectLead(lead)} className="hover:bg-slate-50 cursor-pointer">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-slate-900">{lead.name}</div>
+                        <div className="text-sm text-slate-500">{lead.phone}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-900">{lead.service || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusConfig?.color.bg} ${statusConfig?.color.text}`}>
+                          {statusConfig?.name || lead.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                        {salesperson?.name || 'Chưa gán'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                        {lead.potentialRevenue ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(lead.potentialRevenue) : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                        {lead.source || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                        {new Date(lead.createdAt).toLocaleDateString('vi-VN')}
+                      </td>
+                    </tr>
                   );
                 })}
-                {canCreate('leads') && (
-                  <button 
-                    onClick={() => onAddLead(statusConfig.id)}
-                    className="w-full text-left text-sm text-slate-500 hover:bg-slate-200 p-2 rounded-lg flex items-center"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Thêm mới
-                  </button>
-                )}
+              </tbody>
+            </table>
+            {filteredLeads.length === 0 && (
+              <div className="p-8 text-center text-slate-500">
+                Không tìm thấy cơ hội nào phù hợp.
               </div>
-            </div>
-          );
-        })}
-      </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -11,7 +11,6 @@ import Sidebar from './components/Sidebar';
 import MainHeader from './components/MainHeader';
 import LoginView from './components/LoginView';
 import KanbanBoard from './components/KanbanBoard';
-import LeadList from './components/LeadList';
 import CalendarView from './components/CalendarView';
 import CskhView from './components/CskhView';
 import ReExaminationView from './components/ReExaminationView';
@@ -31,7 +30,6 @@ import CustomerFormModal from './components/CustomerFormModal';
 import CustomerDetailView from './components/CustomerDetailView';
 import CskhDetailModal from './components/CskhDetailModal';
 import CompleteLeadModal from './components/CompleteLeadModal';
-import StatusManagementModal from './components/StatusManagementModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import AddReExaminationModal from './components/AddReExaminationModal';
 import ReExaminationDetailModal from './components/ReExaminationDetailModal';
@@ -54,7 +52,6 @@ function AppContent() {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
 
   // --- Data State ---
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -98,9 +95,6 @@ function AppContent() {
   const [selectedReExam, setSelectedReExam] = useState<ReExamination | null>(null);
   const [deleteCskhTarget, setDeleteCskhTarget] = useState<string | null>(null);
   const [deleteReExamTarget, setDeleteReExamTarget] = useState<string | null>(null);
-
-  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
-  const [statusModalType, setStatusModalType] = useState<'sales' | 'cskh'>('sales');
 
   const [confirmModal, setConfirmModal] = useState<{
       isOpen: boolean;
@@ -2103,7 +2097,6 @@ function AppContent() {
             {activeView === 'dashboard' && renderDashboard()}
             
             {activeView === 'sales' && (
-               viewMode === 'kanban' ? (
                 <KanbanBoard 
                     leads={leads}
                     sales={sales}
@@ -2116,21 +2109,9 @@ function AppContent() {
                     sources={sources}
                     selectedSource={selectedSource}
                     onSourceChange={setSelectedSource}
-                    onCustomizeStatuses={() => { setStatusModalType('sales'); setIsStatusModalOpen(true); }}
                     selectedSale={selectedSaleFilter}
                     onSaleChange={setSelectedSaleFilter}
                 />
-               ) : (
-                   <LeadList 
-                        leads={leads} 
-                        sales={sales} 
-                        onSelectLead={setSelectedLead} 
-                        sources={sources}
-                        selectedSource={selectedSource}
-                        onSourceChange={setSelectedSource}
-                        onDeleteLead={executeDeleteLead}
-                   />
-               )
             )}
 
             {activeView === 'cskh' && (
@@ -2138,7 +2119,6 @@ function AppContent() {
                     cskhItems={cskhItems}
                     statuses={cskhStatuses}
                     onUpdateCskhStatus={handleUpdateCskhStatus}
-                    onCustomizeStatuses={() => { setStatusModalType('cskh'); setIsStatusModalOpen(true); }}
                     onSelectCskh={setSelectedCskh}
                     onDeleteCskh={setDeleteCskhTarget}
                 />
@@ -2418,23 +2398,6 @@ function AppContent() {
               lead={leadToComplete}
               onClose={() => setLeadToComplete(null)}
               onConfirm={executeLeadCompletion}
-          />
-      )}
-      
-      {isStatusModalOpen && (
-          <StatusManagementModal 
-              statuses={statusModalType === 'sales' ? statuses : cskhStatuses}
-              leads={leads}
-              onClose={() => setIsStatusModalOpen(false)}
-              onSave={(newStatuses) => {
-                  if (statusModalType === 'sales') {
-                      updateSetting('statuses', newStatuses, setStatuses);
-                  } else {
-                      updateSetting('cskh_statuses', newStatuses, setCskhStatuses);
-                  }
-                  setIsStatusModalOpen(false);
-              }}
-              statusKey={statusModalType === 'sales' ? 'status' : 'cskhStatus'}
           />
       )}
 
