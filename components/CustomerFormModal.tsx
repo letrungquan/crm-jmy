@@ -373,7 +373,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
             </button>
           </header>
 
-          <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 space-y-4 max-h-[70vh] overflow-y-auto">
              {/* Thông tin cơ bản */}
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide border-b pb-1 mb-3">Thông tin cơ bản</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

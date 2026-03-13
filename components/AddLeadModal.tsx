@@ -92,7 +92,7 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ sales, customers, sources, 
             </button>
           </header>
           
-          <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 space-y-4 max-h-[70vh] overflow-y-auto">
             <div className="relative">
               <label htmlFor="name" className="block text-sm font-medium text-slate-700">Tên khách hàng *</label>
               <input 

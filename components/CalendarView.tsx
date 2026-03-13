@@ -205,21 +205,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, reExaminations = [],
     };
 
     return (
-        <div className="grid grid-cols-7 gap-px bg-slate-200 border-t border-l border-slate-200 rounded-lg overflow-hidden">
-            {daysOfWeek.map(day => (
-              <div key={day} className="py-2 text-center font-semibold text-xs sm:text-sm text-slate-600 bg-slate-100">
-                {day}
-              </div>
-            ))}
-            {Array.from({ length: startDay }).map((_, i) => (
-              <div key={`empty-${i}`} className="bg-slate-50 min-h-[120px] sm:min-h-[140px]"></div>
-            ))}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const day = i + 1;
-              const { dailyLeads, dailyReExams, dailyRevenue } = getItemsForDay(day);
-              const isToday = today.getFullYear() === currentDate.getFullYear() && today.getMonth() === currentDate.getMonth() && today.getDate() === day;
-              return (
-                <div key={day} className="p-1 sm:p-2 bg-white min-h-[120px] sm:min-h-[140px] flex flex-col transition-colors hover:bg-slate-50">
+        <div className="overflow-x-auto hide-scrollbar rounded-lg border border-slate-200">
+            <div className="grid grid-cols-7 gap-px bg-slate-200 min-w-[700px]">
+                {daysOfWeek.map(day => (
+                  <div key={day} className="py-2 text-center font-semibold text-xs sm:text-sm text-slate-600 bg-slate-100">
+                    {day}
+                  </div>
+                ))}
+                {Array.from({ length: startDay }).map((_, i) => (
+                  <div key={`empty-${i}`} className="bg-slate-50 min-h-[120px] sm:min-h-[140px]"></div>
+                ))}
+                {Array.from({ length: daysInMonth }).map((_, i) => {
+                  const day = i + 1;
+                  const { dailyLeads, dailyReExams, dailyRevenue } = getItemsForDay(day);
+                  const isToday = today.getFullYear() === currentDate.getFullYear() && today.getMonth() === currentDate.getMonth() && today.getDate() === day;
+                  return (
+                    <div key={day} className="p-1 sm:p-2 bg-white min-h-[120px] sm:min-h-[140px] flex flex-col transition-colors hover:bg-slate-50">
                   <div className="flex justify-between items-center">
                     <span className={`flex items-center justify-center h-6 w-6 sm:h-7 sm:w-7 rounded-full text-xs sm:text-sm font-medium ${isToday ? 'bg-blue-600 text-white' : 'text-slate-700'}`}>
                       {day}
@@ -290,6 +291,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, reExaminations = [],
                 </div>
               );
             })}
+            </div>
         </div>
     );
   };
@@ -383,11 +385,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({ leads, reExaminations = [],
   return (
     <div className="w-full bg-slate-50 p-2 sm:p-6 rounded-lg">
       <header className="flex flex-col sm:flex-row justify-between items-center pb-4 mb-4 border-b border-slate-200 bg-white p-4 rounded-lg shadow-sm">
-        <div className="flex items-center">
+        <div className="flex items-center justify-between w-full sm:w-auto">
             <button onClick={() => changeDate(-1)} className="p-2 rounded-full hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             </button>
-            <div className="flex flex-col sm:flex-row items-center">
+            <div className="flex flex-col sm:flex-row items-center flex-1 justify-center">
                 <h2 className="text-lg sm:text-2xl font-bold text-slate-800 mx-2 sm:mx-4 text-center">
                     {getHeaderText()}
                 </h2>

@@ -84,7 +84,7 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ lead, salesperson, onClick, onA
       {onDelete && (
         <button 
             onClick={handleDeleteClick}
-            className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity border border-slate-100 z-10"
+            className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-red-500 bg-white rounded-full shadow-sm md:opacity-0 md:group-hover:opacity-100 transition-opacity border border-slate-100 z-10"
             title="Xóa cơ hội"
         >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

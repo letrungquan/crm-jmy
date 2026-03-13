@@ -93,7 +93,7 @@ const CompleteLeadModal: React.FC<CompleteLeadModalProps> = ({ lead, onClose, on
         </header>
         
         <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
-          <div className="p-6 space-y-4 overflow-y-auto">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
             <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-sm text-yellow-800 mb-4">
                 Khách hàng có thể đã mua nhiều hơn hoặc thay đổi dịch vụ so với dự kiến. Vui lòng cập nhật thông tin thực tế để tạo phiếu CSKH chính xác.
             </div>

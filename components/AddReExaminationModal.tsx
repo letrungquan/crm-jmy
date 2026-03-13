@@ -73,7 +73,7 @@ const AddReExaminationModal: React.FC<AddReExaminationModalProps> = ({ customers
         </header>
         
         <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
-          <div className="p-6 space-y-4 overflow-y-auto">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
             {/* Customer Selection */}
             <div className="relative">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Khách hàng</label>

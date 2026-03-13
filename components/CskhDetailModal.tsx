@@ -72,7 +72,7 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
           </button>
         </header>
 
-        <div className="p-6 overflow-y-auto flex-grow">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-grow">
             <div className="space-y-4">
                 {/* Customer Info */}
                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">

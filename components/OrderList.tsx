@@ -202,11 +202,11 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                     onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 />
            </div>
-           <div className="flex gap-4">
+           <div className="flex flex-col sm:flex-row gap-4">
                <select 
                    value={statusFilter} 
                    onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-                   className="block w-40 px-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                   className="block w-full sm:w-40 px-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                >
                    <option value="all">Tất cả trạng thái</option>
                    <option value="completed">Hoàn thành</option>
@@ -216,7 +216,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                <select 
                    value={sourceFilter} 
                    onChange={(e) => { setSourceFilter(e.target.value); setCurrentPage(1); }}
-                   className="block w-40 px-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                   className="block w-full sm:w-40 px-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                >
                    <option value="all">Tất cả nguồn</option>
                    <option value="manual">Thủ công</option>

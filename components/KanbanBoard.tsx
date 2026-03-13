@@ -61,13 +61,31 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
 
   const filteredLeads = leads.filter(lead => {
-    if (!searchQuery) return true;
-    const lowerQuery = searchQuery.toLowerCase();
-    return (
-      lead.name.toLowerCase().includes(lowerQuery) ||
-      lead.phone.includes(lowerQuery) ||
-      (lead.service && lead.service.toLowerCase().includes(lowerQuery))
-    );
+    // Filter by source
+    if (selectedSource !== 'all' && lead.source !== selectedSource) {
+      return false;
+    }
+    
+    // Filter by sale
+    if (selectedSale !== 'all') {
+      if (selectedSale === 'unassigned') {
+        if (lead.assignedTo) return false;
+      } else {
+        if (lead.assignedTo !== selectedSale) return false;
+      }
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      return (
+        lead.name.toLowerCase().includes(lowerQuery) ||
+        lead.phone.includes(lowerQuery) ||
+        (lead.service && lead.service.toLowerCase().includes(lowerQuery))
+      );
+    }
+    
+    return true;
   }).sort((a, b) => {
     const dateA = new Date(a.createdAt).getTime();
     const dateB = new Date(b.createdAt).getTime();
@@ -78,17 +96,25 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
     setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
   };
 
+  const hasActiveFilters = selectedSource !== 'all' || selectedSale !== 'all' || searchQuery !== '';
+
+  const clearFilters = () => {
+    onSourceChange('all');
+    onSaleChange('all');
+    setSearchQuery('');
+  };
+
   return (
     <div className="h-full flex flex-col">
-      <div className="px-4 pt-4 flex items-center flex-wrap gap-4 justify-between">
-        <div className="flex items-center flex-wrap gap-4">
-          <div className="flex items-center">
-            <label htmlFor="source-filter" className="text-sm font-medium text-slate-600 mr-2">Nguồn:</label>
+      <div className="px-4 pt-4 flex flex-col sm:flex-row items-start sm:items-center flex-wrap gap-4 justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center flex-wrap gap-4 w-full sm:w-auto">
+          <div className="flex items-center w-full sm:w-auto">
+            <label htmlFor="source-filter" className="text-sm font-medium text-slate-600 mr-2 whitespace-nowrap">Nguồn:</label>
             <select
               id="source-filter"
               value={selectedSource}
               onChange={(e) => onSourceChange(e.target.value)}
-              className="px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900"
+              className="flex-1 sm:flex-none px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900"
             >
               {sources.map(source => (
                 <option key={source} value={source}>
@@ -97,13 +123,13 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               ))}
             </select>
           </div>
-          <div className="flex items-center">
-            <label htmlFor="sale-filter" className="text-sm font-medium text-slate-600 mr-2">Người phụ trách:</label>
+          <div className="flex items-center w-full sm:w-auto">
+            <label htmlFor="sale-filter" className="text-sm font-medium text-slate-600 mr-2 whitespace-nowrap">Phụ trách:</label>
             <select
               id="sale-filter"
               value={selectedSale}
               onChange={(e) => onSaleChange(e.target.value)}
-              className="px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900"
+              className="flex-1 sm:flex-none px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900"
             >
               <option value="all">Tất cả</option>
               <option value="unassigned">Chưa gán</option>
@@ -114,26 +140,37 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               ))}
             </select>
           </div>
-          <div className="flex items-center">
+          <div className="flex items-center w-full sm:w-auto">
             <input
               type="text"
               placeholder="Tìm kiếm tên, SĐT, dịch vụ..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900 w-64"
+              className="w-full sm:w-64 px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900"
             />
           </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-sm text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-md hover:bg-red-50 transition-colors flex items-center w-full sm:w-auto justify-center sm:justify-start"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Xóa bộ lọc
+            </button>
+          )}
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-lg">
+        <div className="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto justify-center">
           <button
             onClick={() => setViewMode('kanban')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            className={`flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
             Kanban
           </button>
           <button
             onClick={() => setViewMode('list')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            className={`flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
             Danh sách
           </button>

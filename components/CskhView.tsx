@@ -60,31 +60,31 @@ const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhSt
 
   return (
     <div className="h-full flex flex-col">
-       <div className="px-4 pt-4 mb-4 flex justify-between items-center flex-wrap gap-4">
-        <div>
+       <div className="px-4 pt-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center flex-wrap gap-4">
+        <div className="w-full sm:w-auto">
           <h2 className="text-2xl font-bold text-slate-800">Hành trình CSKH</h2>
           <p className="text-sm text-slate-500 mt-1">
             Kéo thả khách hàng qua các giai đoạn để theo dõi quá trình chăm sóc sau dịch vụ.
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
           <input
             type="text"
             placeholder="Tìm kiếm tên, SĐT, dịch vụ..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900 w-64"
+            className="w-full sm:w-64 px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900"
           />
-          <div className="flex bg-slate-100 p-1 rounded-lg">
+          <div className="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto justify-center">
             <button
               onClick={() => setViewMode('kanban')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              className={`flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Kanban
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              className={`flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Danh sách
             </button>

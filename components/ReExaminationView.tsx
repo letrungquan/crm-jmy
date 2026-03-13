@@ -209,7 +209,7 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
                           e.stopPropagation(); 
                           onDeleteReExam(item.id); 
                       }}
-                      className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity border border-slate-100 z-10"
+                      className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm md:opacity-0 md:group-hover:opacity-100 transition-opacity border border-slate-100 z-10"
                       title="Xóa lịch hẹn"
                   >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -315,32 +315,32 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
                 )}
 
                 {/* Date Filter */}
-                <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm">
-                    <button onClick={() => setDateFilter('today')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dateFilter === 'today' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Hôm nay</button>
-                    <button onClick={() => setDateFilter('tomorrow')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dateFilter === 'tomorrow' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Ngày mai</button>
-                    <button onClick={() => setDateFilter('week')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dateFilter === 'week' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Tuần này</button>
-                    <button onClick={() => setDateFilter('all')} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dateFilter === 'all' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Tất cả</button>
+                <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm overflow-x-auto hide-scrollbar">
+                    <button onClick={() => setDateFilter('today')} className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dateFilter === 'today' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Hôm nay</button>
+                    <button onClick={() => setDateFilter('tomorrow')} className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dateFilter === 'tomorrow' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Ngày mai</button>
+                    <button onClick={() => setDateFilter('week')} className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dateFilter === 'week' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Tuần này</button>
+                    <button onClick={() => setDateFilter('all')} className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${dateFilter === 'all' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Tất cả</button>
                 </div>
 
                 {/* View Mode Toggle */}
-                <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm">
+                <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm overflow-x-auto hide-scrollbar">
                     <button 
                         onClick={() => setViewMode('kanban')} 
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'kanban' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}
+                        className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'kanban' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                         Kanban
                     </button>
                     <button 
                         onClick={() => setViewMode('doctor')} 
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'doctor' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}
+                        className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'doctor' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                         Bác sĩ
                     </button>
                     <button 
                         onClick={() => setViewMode('time')} 
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'time' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}
+                        className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${viewMode === 'time' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                         Thời gian
@@ -348,16 +348,16 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
                 </div>
 
                 {/* Filter Status Toggle */}
-                <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm">
+                <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm overflow-x-auto hide-scrollbar">
                     <button 
                         onClick={() => setFilterStatus('active')} 
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${filterStatus === 'active' ? 'bg-green-50 text-green-700' : 'text-slate-500 hover:bg-slate-50'}`}
+                        className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${filterStatus === 'active' ? 'bg-green-50 text-green-700' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
                         Cần xử lý
                     </button>
                     <button 
                         onClick={() => setFilterStatus('all')} 
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${filterStatus === 'all' ? 'bg-green-50 text-green-700' : 'text-slate-500 hover:bg-slate-50'}`}
+                        className={`flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${filterStatus === 'all' ? 'bg-green-50 text-green-700' : 'text-slate-500 hover:bg-slate-50'}`}
                     >
                         Tất cả
                     </button>

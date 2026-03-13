@@ -287,7 +287,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
 
         {/* Time Filter Bar */}
         <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-2">
-          <div className="flex bg-slate-100 p-1 rounded-lg">
+          <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto w-full md:w-auto hide-scrollbar">
             {[
               { id: 'today', label: 'Hôm nay' },
               { id: 'yesterday', label: 'Hôm qua' },
@@ -300,7 +300,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
               <button
                 key={btn.id}
                 onClick={() => setTimeRange(btn.id as TimeRange)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeRange === btn.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-md transition-all ${timeRange === btn.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 {btn.label}
               </button>
@@ -308,10 +308,10 @@ const ReportsView: React.FC<ReportsViewProps> = ({ leads, orders, cskhItems, cus
           </div>
 
           {timeRange === 'custom' && (
-            <div className="flex items-center space-x-2 ml-2 animate-fade-in">
-              <input type="date" value={customRange.start} onChange={e => setCustomRange(prev => ({ ...prev, start: e.target.value }))} className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none"/>
+            <div className="flex flex-wrap items-center gap-2 ml-2 animate-fade-in">
+              <input type="date" value={customRange.start} onChange={e => setCustomRange(prev => ({ ...prev, start: e.target.value }))} className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none w-[120px]"/>
               <span className="text-slate-400">→</span>
-              <input type="date" value={customRange.end} onChange={e => setCustomRange(prev => ({ ...prev, end: e.target.value }))} className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none"/>
+              <input type="date" value={customRange.end} onChange={e => setCustomRange(prev => ({ ...prev, end: e.target.value }))} className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:ring-blue-500 outline-none w-[120px]"/>
             </div>
           )}
           

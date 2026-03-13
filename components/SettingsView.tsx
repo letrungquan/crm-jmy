@@ -26,7 +26,7 @@ const ConfigSection: React.FC<{
 }> = ({ title, description, items, onUpdate, canEdit = true }) => {
   const [newItem, setNewItem] = useState('');
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
+    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 mb-6">
       <div className="mb-4">
         <h3 className="text-lg font-bold text-slate-800">{title}</h3>
         <p className="text-sm text-slate-500">{description}</p>
@@ -190,7 +190,7 @@ const RoleManagementSection: React.FC<{ roles: RoleDefinition[], onRefresh: () =
     const selectedRole = roles.find(r => r.id === selectedRoleId);
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 mb-6">
             <div className="flex justify-between items-start mb-4">
                 <div>
                     <h3 className="text-lg font-bold text-slate-800">Phân quyền Vai trò</h3>
@@ -504,7 +504,7 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
     };
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 mb-6">
             <div className="flex justify-between items-start mb-4">
                 <div><h3 className="text-lg font-bold text-slate-800">Quản lý nhân sự</h3><p className="text-sm text-slate-500">Danh sách tài khoản truy cập hệ thống</p></div>
                 {isAdmin && (<button onClick={openAddModal} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-semibold">+ Thêm nhân viên</button>)}
@@ -546,7 +546,7 @@ const UserManagementSection: React.FC<{ sales: Sale[], roles: RoleDefinition[], 
                             </nav>
                         </div>
 
-                        <div className="p-6 overflow-y-auto flex-1">
+                        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
                             {activeTab === 'info' ? (
                                 <form onSubmit={handleSaveUser} className="space-y-4">
                                     <div>
@@ -701,7 +701,7 @@ const SettingsView: React.FC<SettingsViewProps> = (props) => {
   }, [props.isAdmin]);
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold text-slate-800 mb-6">Cài đặt hệ thống</h2>
       
       {props.isAdmin && (

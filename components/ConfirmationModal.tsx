@@ -27,7 +27,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <h3 className={`text-lg font-bold mb-3 ${isDangerous ? 'text-red-600' : 'text-slate-800'}`}>
             {title}
           </h3>

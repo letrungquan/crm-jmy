@@ -127,7 +127,7 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
           </button>
         </header>
 
-        <div className="p-6 overflow-y-auto flex-grow">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-grow">
           {isCskh ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
