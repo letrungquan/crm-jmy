@@ -196,6 +196,7 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
                  <p className="text-sm text-slate-500"><strong>SĐT:</strong> {lead.phone}</p>
                  <p className="text-sm text-slate-500"><strong>Nguồn:</strong> {lead.source}</p>
                  <p className="text-sm text-slate-500"><strong>Ngày tạo:</strong> {new Date(lead.createdAt).toLocaleString('vi-VN')}</p>
+                 {lead.updatedAt && <p className="text-sm text-slate-500"><strong>Ngày cập nhật:</strong> {new Date(lead.updatedAt).toLocaleString('vi-VN')}</p>}
              </div>
             </div>
           ) : (
@@ -299,6 +300,7 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
                    <p className="text-sm text-slate-500"><strong>SĐT:</strong> {lead.phone}</p>
                    <p className="text-sm text-slate-500"><strong>Nguồn:</strong> {lead.source}</p>
                    <p className="text-sm text-slate-500"><strong>Ngày tạo:</strong> {new Date(lead.createdAt).toLocaleString('vi-VN')}</p>
+                   {lead.updatedAt && <p className="text-sm text-slate-500"><strong>Ngày cập nhật:</strong> {new Date(lead.updatedAt).toLocaleString('vi-VN')}</p>}
                </div>
             </div>
           )}

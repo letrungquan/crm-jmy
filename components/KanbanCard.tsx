@@ -100,7 +100,7 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ lead, salesperson, onClick, onA
          </div>
       </div>
       <p className="text-xs text-slate-500 mt-1">{lead.phone}</p>
-      <p className="text-xs font-medium text-slate-700 mt-2">{lead.service}</p>
+      <p className="text-xs font-medium text-slate-700 mt-2 truncate" title={lead.service}>{lead.service}</p>
       
       {formattedDate && (
         <div className="text-xs text-blue-600 font-semibold mt-2 flex items-center">

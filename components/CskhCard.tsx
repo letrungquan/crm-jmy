@@ -98,7 +98,7 @@ const CskhCard: React.FC<CskhCardProps> = ({ item, statusConfig, onDelete, onCli
       </div>
       
       <div className="mt-2.5 space-y-1.5 text-xs">
-         <p className="font-medium text-slate-700">{item.service}</p>
+         <p className="font-medium text-slate-700 truncate" title={item.service}>{item.service}</p>
          {item.note && (
              <p className="text-slate-600 bg-slate-50 p-1.5 rounded border border-slate-100 italic line-clamp-2">
                  "{item.note}"

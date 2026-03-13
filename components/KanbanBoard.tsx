@@ -40,6 +40,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [sortBy, setSortBy] = useState<'createdAt' | 'updatedAt'>('createdAt');
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, statusId: string) => {
     e.preventDefault();
@@ -87,8 +88,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
     
     return true;
   }).sort((a, b) => {
-    const dateA = new Date(a.createdAt).getTime();
-    const dateB = new Date(b.createdAt).getTime();
+    const dateA = new Date(sortBy === 'updatedAt' ? (a.updatedAt || a.createdAt) : a.createdAt).getTime();
+    const dateB = new Date(sortBy === 'updatedAt' ? (b.updatedAt || b.createdAt) : b.createdAt).getTime();
     return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
   });
 
@@ -148,6 +149,25 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full sm:w-64 px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900"
             />
+          </div>
+          <div className="flex items-center w-full sm:w-auto">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'createdAt' | 'updatedAt')}
+              className="w-full sm:w-auto px-3 py-1.5 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-slate-900"
+            >
+              <option value="createdAt">Ngày tạo</option>
+              <option value="updatedAt">Ngày cập nhật</option>
+            </select>
+            <button
+              onClick={toggleSortOrder}
+              className="ml-2 p-1.5 border border-slate-300 rounded-md shadow-sm bg-white text-slate-600 hover:bg-slate-50"
+              title={sortOrder === 'desc' ? 'Mới nhất trước' : 'Cũ nhất trước'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+            </button>
           </div>
           {hasActiveFilters && (
             <button
@@ -229,8 +249,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           })}
         </div>
       ) : (
-        <div className="flex-1 overflow-auto p-4">
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="flex-1 overflow-hidden p-4 flex flex-col">
+          <div className="bg-white rounded-lg shadow overflow-x-auto flex-1">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
@@ -263,8 +283,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         <div className="text-sm font-medium text-slate-900">{lead.name}</div>
                         <div className="text-sm text-slate-500">{lead.phone}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-900">{lead.service || '-'}</div>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-slate-900 max-w-xs truncate" title={lead.service || ''}>{lead.service || '-'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusConfig?.color.bg} ${statusConfig?.color.text}`}>

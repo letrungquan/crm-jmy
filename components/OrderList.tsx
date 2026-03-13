@@ -299,8 +299,10 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                                         <div className="text-sm font-bold text-slate-900">{customer?.name || order.customerName || order.customerPhone}</div>
                                         <div className="text-xs text-slate-500">{order.customerPhone}</div>
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-slate-700 max-w-[150px] truncate" title={order.service}>
-                                        {order.service}
+                                    <td className="px-3 py-2">
+                                        <div className="text-sm text-slate-700 max-w-[150px] truncate" title={order.service}>
+                                            {order.service}
+                                        </div>
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-bold text-slate-800">
                                         {formatCurrency(order.revenue)}

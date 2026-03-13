@@ -134,8 +134,8 @@ const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhSt
           })}
         </div>
       ) : (
-        <div className="flex-1 overflow-auto p-4">
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="flex-1 overflow-hidden p-4 flex flex-col">
+          <div className="bg-white rounded-lg shadow overflow-x-auto flex-1">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
@@ -165,8 +165,8 @@ const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhSt
                         <div className="text-sm font-medium text-slate-900">{item.customerName}</div>
                         <div className="text-sm text-slate-500">{item.customerPhone}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-900">{item.service || '-'}</div>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-slate-900 max-w-xs truncate" title={item.service || ''}>{item.service || '-'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusConfig?.color.bg} ${statusConfig?.color.text}`}>
