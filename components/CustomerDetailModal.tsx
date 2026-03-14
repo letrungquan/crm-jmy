@@ -67,15 +67,8 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
             });
         });
         
-        // Add general customer notes if they exist in a separate array
-        if (customer.notes) {
-            customer.notes.forEach(note => {
-                notes.push({ ...note, leadService: 'Ghi chú chung', leadId: null });
-            });
-        }
-        
         return notes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }, [customer.leads, customer.notes]);
+    }, [customer.leads]);
 
     const interactionCount = allNotes.length;
 

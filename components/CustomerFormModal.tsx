@@ -301,7 +301,19 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    let finalValue = value;
+    if (name === 'phone') {
+        // Normalize phone: remove spaces, dashes, and convert +84 to 0
+        finalValue = value.replace(/[\s\-]/g, '');
+        if (finalValue.startsWith('+84')) {
+            finalValue = '0' + finalValue.slice(3);
+        } else if (finalValue.startsWith('84')) {
+            finalValue = '0' + finalValue.slice(2);
+        }
+    }
+
+    setFormData(prev => ({ ...prev, [name]: finalValue }));
     // Clear error when user types
     if (errors[name]) {
         setErrors(prev => {
@@ -397,7 +409,6 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
                     id="phone" 
                     value={formData.phone} 
                     onChange={handleChange} 
-                    disabled={isEditMode} 
                     className={`mt-1 block w-full px-3 py-2 bg-white border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 ${errors.phone ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300'}`}
                   />
                   {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}

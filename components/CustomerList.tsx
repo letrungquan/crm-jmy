@@ -9,6 +9,7 @@ interface CustomerListProps {
   onAddCustomer: () => void;
   onDeleteCustomer?: (phone: string) => void;
   onBulkDelete?: (phones: string[]) => void;
+  onMergeCustomers?: (phones: string[]) => void;
   sources?: string[];
   relationships?: string[];
   customerGroups?: string[];
@@ -28,6 +29,7 @@ const CustomerList: React.FC<CustomerListProps> = ({
     onAddCustomer, 
     onDeleteCustomer, 
     onBulkDelete,
+    onMergeCustomers,
     sources = [],
     relationships = [],
     customerGroups = [],
@@ -193,7 +195,19 @@ const CustomerList: React.FC<CustomerListProps> = ({
                      <span className="text-xs font-bold text-blue-800 ml-2">Đã chọn {selectedPhones.size} khách hàng</span>
                      <button onClick={() => setSelectedPhones(new Set())} className="text-[10px] text-blue-600 hover:underline uppercase font-bold">Bỏ chọn</button>
                  </div>
-                 <div>
+                 <div className="flex items-center space-x-2">
+                     {onMergeCustomers && selectedPhones.size === 2 && (
+                         <button 
+                             onClick={() => {
+                                 onMergeCustomers(Array.from(selectedPhones));
+                                 setSelectedPhones(new Set());
+                             }} 
+                             className="px-2.5 py-1 bg-white border border-indigo-200 text-indigo-600 rounded text-[10px] font-bold hover:bg-indigo-50 shadow-sm flex items-center uppercase transition-all"
+                         >
+                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                             Gộp 2 khách hàng
+                         </button>
+                     )}
                      {onBulkDelete && canDelete('customers') && (
                          <button 
                              onClick={handleBulkAction} 

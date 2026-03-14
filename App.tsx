@@ -30,6 +30,7 @@ import CustomerFormModal from './components/CustomerFormModal';
 import CustomerDetailView from './components/CustomerDetailView';
 import CskhDetailModal from './components/CskhDetailModal';
 import CompleteLeadModal from './components/CompleteLeadModal';
+import CompleteReExamModal from './components/CompleteReExamModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import AddReExaminationModal from './components/AddReExaminationModal';
 import ReExaminationDetailModal from './components/ReExaminationDetailModal';
@@ -80,6 +81,7 @@ function AppContent() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
   const [leadToComplete, setLeadToComplete] = useState<Lead | null>(null);
+  const [reExamToComplete, setReExamToComplete] = useState<ReExamination | null>(null);
   
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isCustomerFormOpen, setIsCustomerFormOpen] = useState(false);
@@ -1471,6 +1473,13 @@ function AppContent() {
 
   const handleUpdateReExamStatus = async (id: string, status: 'pending' | 'called' | 'completed' | 'cancelled' | 'converted') => {
       if (!hasPermission('appointments', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT TÁI KHÁM."); return; }
+      
+      if (status === 'completed') {
+          const reExam = reExaminations.find(r => r.id === id);
+          if (reExam) { setReExamToComplete(reExam); }
+          return;
+      }
+
       const prevReExams = [...reExaminations];
       setReExaminations(prev => prev.map(item => item.id === id ? { ...item, status } : item));
 
@@ -1485,6 +1494,136 @@ function AppContent() {
       } catch (err) {
           alert(formatErrorMessage(err));
           setReExaminations(prevReExams);
+      }
+  };
+
+  const executeReExamCompletion = async (data: { actualRevenue: number; actualService: string; note: string; doctorName: string; reExaminationDate: string; reExamService?: string; reExamNote?: string; reExamRevenue?: number }) => {
+      if (!reExamToComplete) return;
+      const targetReExam = reExamToComplete;
+      setReExamToComplete(null);
+      
+      const { actualRevenue, actualService, note, doctorName, reExaminationDate, reExamService, reExamNote, reExamRevenue } = data;
+      const updatedNoteContent = note ? `[HOÀN THÀNH TÁI KHÁM] ${note}` : undefined;
+      const now = new Date().toISOString();
+
+      const updatedReExamState = { 
+          ...targetReExam, 
+          status: 'completed' as const, 
+          potentialRevenue: actualRevenue, 
+          service: actualService,
+          updatedAt: now,
+          notes: updatedNoteContent ? [{
+              id: `note_temp_${Date.now()}`,
+              content: updatedNoteContent,
+              createdAt: now,
+              createdBy: currentUser
+          }, ...(targetReExam.notes || [])] : (targetReExam.notes || [])
+      };
+
+      setReExaminations(prev => prev.map(r => r.id === targetReExam.id ? updatedReExamState : r));
+      if (selectedReExam?.id === targetReExam.id) setSelectedReExam(null);
+
+      // Local update for immediate feedback
+      const newCskhItem: CskhItem = {
+          id: `cskh_${Date.now()}`,
+          customerPhone: targetReExam.customerPhone,
+          customerName: targetReExam.customerName,
+          service: actualService,
+          status: 'cskh_new',
+          assignedTo: targetReExam.assignedTo,
+          originalLeadId: undefined, // Not a lead
+          createdAt: now,
+          updatedAt: now,
+          doctorName: doctorName,
+          reExaminationDate: reExaminationDate || null
+      };
+      setCskhItems(prev => [newCskhItem, ...prev]);
+
+      // Also create ReExamination if date is set
+      if (reExaminationDate) {
+          const newReExam: ReExamination = {
+              id: `re_exam_${Date.now()}`,
+              customerPhone: targetReExam.customerPhone,
+              customerName: targetReExam.customerName,
+              date: reExaminationDate,
+              service: reExamService || actualService,
+              doctorName: doctorName,
+              assignedTo: targetReExam.assignedTo,
+              status: 'pending',
+              createdAt: now,
+              potentialRevenue: reExamRevenue,
+              note: reExamNote
+          };
+          setReExaminations(prev => [...prev, newReExam]);
+      }
+
+      if (useLocalOnly) {
+          setLocalReExams(prev => prev.map(r => r.id === targetReExam.id ? updatedReExamState : r));
+          return;
+      }
+
+      try {
+          // 1. Update ReExamination
+          const { error: reExamError } = await supabase.from('re_examinations').update({ 
+              status: 'completed',
+              potential_revenue: actualRevenue,
+              service: actualService,
+              updated_at: now
+          }).eq('id', targetReExam.id);
+          
+          if (reExamError) throw reExamError;
+
+          // 2. Add note if exists
+          if (updatedNoteContent) {
+              await supabase.from('notes').insert([{
+                  id: `note_${Date.now()}`,
+                  re_examination_id: targetReExam.id,
+                  content: updatedNoteContent,
+                  created_by: currentUser,
+                  created_at: now
+              }]);
+          }
+
+          // 3. Create CSKH Item
+          const { error: cskhError } = await supabase.from('cskh').insert([{
+              id: newCskhItem.id,
+              customer_phone: newCskhItem.customerPhone,
+              customer_name: newCskhItem.customerName,
+              service: newCskhItem.service,
+              status: newCskhItem.status,
+              assigned_to: newCskhItem.assignedTo,
+              created_at: now,
+              updated_at: now,
+              doctor_name: newCskhItem.doctorName,
+              re_examination_date: newCskhItem.reExaminationDate
+          }]);
+
+          if (cskhError) throw cskhError;
+
+          // 4. Create new ReExamination if scheduled
+          if (reExaminationDate) {
+              const { error: newReExamError } = await supabase.from('re_examinations').insert([{
+                  id: `re_exam_${Date.now()}`,
+                  customer_phone: targetReExam.customerPhone,
+                  customer_name: targetReExam.customerName,
+                  date: reExaminationDate,
+                  service: reExamService || actualService,
+                  doctor_name: doctorName,
+                  assigned_to: targetReExam.assignedTo,
+                  status: 'pending',
+                  created_at: now,
+                  potential_revenue: reExamRevenue,
+                  note: reExamNote
+              }]);
+              if (newReExamError) throw newReExamError;
+          }
+
+      } catch (err) {
+          console.error("Error completing re-examination:", err);
+          alert("Có lỗi xảy ra khi hoàn thành tái khám: " + formatErrorMessage(err));
+          // Rollback state
+          setReExaminations(prev => prev.map(r => r.id === targetReExam.id ? targetReExam : r));
+          setCskhItems(prev => prev.filter(c => c.id !== newCskhItem.id));
       }
   };
 
@@ -1612,6 +1751,13 @@ function AppContent() {
 
   const handleAddCustomer = async (data: CustomerData) => {
       if (!hasPermission('customers', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM KHÁCH HÀNG."); return; }
+      
+      const existingCustomer = customers.find(c => c.phone === data.phone);
+      if (existingCustomer) {
+          alert(`Số điện thoại ${data.phone} đã tồn tại cho khách hàng "${existingCustomer.name}". Vui lòng tìm kiếm và cập nhật khách hàng đó, hoặc sử dụng tính năng gộp khách hàng.`);
+          return;
+      }
+
       const newCustomer: Customer = {
           ...data,
           name: data.name || 'Khách hàng',
@@ -1668,10 +1814,29 @@ function AppContent() {
 
   const handleUpdateCustomer = async (phone: string, data: Partial<CustomerData>) => {
       if (!hasPermission('customers', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC CẬP NHẬT KHÁCH HÀNG."); return; }
+      
+      const newPhone = data.phone;
+      const phoneChanged = newPhone && newPhone !== phone;
+
+      if (phoneChanged) {
+          const existingCustomer = customers.find(c => c.phone === newPhone);
+          if (existingCustomer) {
+              alert(`Số điện thoại ${newPhone} đã tồn tại cho khách hàng "${existingCustomer.name}". Vui lòng sử dụng tính năng "Gộp 2 khách hàng" ở danh sách khách hàng để gộp.`);
+              return;
+          }
+      }
+
       setCustomers(prev => prev.map(c => c.phone === phone ? { ...c, ...data } : c));
       
       if (selectedCustomer?.phone === phone) {
           setSelectedCustomer(prev => prev ? { ...prev, ...data } : null);
+      }
+
+      if (phoneChanged) {
+          setLeads(prev => prev.map(l => l.phone === phone ? { ...l, phone: newPhone } : l));
+          setOrders(prev => prev.map(o => o.customerPhone === phone ? { ...o, customerPhone: newPhone } : o));
+          setCskhItems(prev => prev.map(c => c.customerPhone === phone ? { ...c, customerPhone: newPhone } : c));
+          setReExaminations(prev => prev.map(r => r.customerPhone === phone ? { ...r, customerPhone: newPhone } : r));
       }
       
       if (useLocalOnly) return;
@@ -1708,10 +1873,170 @@ function AppContent() {
           if (data.eventId !== undefined) dbData.event_id = data.eventId;
           if (data.externalId !== undefined) dbData.external_id = data.externalId;
 
-          const { error } = await supabase.from('customers').update(dbData).eq('phone', phone);
-          if (error) console.error("Error updating customer:", error);
+          if (phoneChanged) {
+              // 1. Fetch current customer data
+              const { data: oldCustomerData, error: fetchError } = await supabase.from('customers').select('*').eq('phone', phone).single();
+              
+              if (fetchError && fetchError.code !== 'PGRST116') {
+                  console.error("Error fetching old customer:", fetchError);
+                  throw fetchError;
+              }
+
+              if (oldCustomerData) {
+                  // 2. Insert new customer with new phone
+                  const newCustomerData = { ...oldCustomerData, ...dbData, phone: newPhone };
+                  const { error: insertError } = await supabase.from('customers').insert([newCustomerData]);
+                  if (insertError) {
+                      console.error("Error inserting new customer:", insertError);
+                      throw insertError;
+                  }
+                  
+                  // 3. Update related tables
+                  await supabase.from('leads').update({ phone: newPhone }).eq('phone', phone);
+                  await supabase.from('orders').update({ customer_phone: newPhone }).eq('customer_phone', phone);
+                  await supabase.from('cskh').update({ customer_phone: newPhone }).eq('customer_phone', phone);
+                  await supabase.from('re_examinations').update({ customer_phone: newPhone }).eq('customer_phone', phone);
+                  
+                  // 4. Delete old customer
+                  await supabase.from('customers').delete().eq('phone', phone);
+              } else {
+                  // If customer didn't exist in DB, just insert new one
+                  dbData.phone = newPhone;
+                  await supabase.from('customers').insert([dbData]);
+                  
+                  // Update related tables just in case
+                  await supabase.from('leads').update({ phone: newPhone }).eq('phone', phone);
+                  await supabase.from('orders').update({ customer_phone: newPhone }).eq('customer_phone', phone);
+                  await supabase.from('cskh').update({ customer_phone: newPhone }).eq('customer_phone', phone);
+                  await supabase.from('re_examinations').update({ customer_phone: newPhone }).eq('customer_phone', phone);
+              }
+          } else {
+              const { error } = await supabase.from('customers').update(dbData).eq('phone', phone);
+              if (error) console.error("Error updating customer:", error);
+          }
       } catch (err) {
           console.error("Error updating customer:", err);
+      }
+  };
+
+  const handleMergeCustomers = async (phones: string[]) => {
+      if (!hasPermission('customers', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC GỘP KHÁCH HÀNG."); return; }
+      if (phones.length !== 2) return;
+
+      const [phone1, phone2] = phones;
+      const customer1 = customers.find(c => c.phone === phone1);
+      const customer2 = customers.find(c => c.phone === phone2);
+
+      if (!customer1 || !customer2) return;
+
+      setConfirmModal({
+          isOpen: true,
+          title: 'Gộp khách hàng',
+          message: `Bạn có chắc chắn muốn gộp khách hàng "${customer2.name}" (${customer2.phone}) vào "${customer1.name}" (${customer1.phone})? Dữ liệu của khách hàng thứ hai sẽ được chuyển sang khách hàng thứ nhất và khách hàng thứ hai sẽ bị xóa.`,
+          isDangerous: false,
+          onConfirm: () => executeMergeCustomers(customer1, customer2)
+      });
+  };
+
+  const executeMergeCustomers = async (primary: Customer, secondary: Customer) => {
+      closeConfirmModal();
+      setIsRefreshing(true);
+
+      try {
+          if (!useLocalOnly) {
+              // Update all references in DB
+              await supabase.from('leads').update({ phone: primary.phone }).eq('phone', secondary.phone);
+              await supabase.from('orders').update({ customer_phone: primary.phone }).eq('customer_phone', secondary.phone);
+              await supabase.from('cskh').update({ customer_phone: primary.phone }).eq('customer_phone', secondary.phone);
+              await supabase.from('re_examinations').update({ customer_phone: primary.phone }).eq('customer_phone', secondary.phone);
+              
+              // Delete secondary customer
+              await supabase.from('customers').delete().eq('phone', secondary.phone);
+          }
+
+          // Update local state
+          const newTags = Array.from(new Set([...(primary.tags || []), ...(secondary.tags || [])]));
+          const newNotes = [primary.generalNotes, secondary.generalNotes].filter(Boolean).join('\n\n---\n\n');
+
+          const mergedData: Partial<Customer> = {
+              email: primary.email || secondary.email,
+              address: primary.address || secondary.address,
+              location: primary.location || secondary.location,
+              province: primary.province || secondary.province,
+              district: primary.district || secondary.district,
+              ward: primary.ward || secondary.ward,
+              source: primary.source || secondary.source,
+              customerGroup: primary.customerGroup || secondary.customerGroup,
+              relationshipStatus: primary.relationshipStatus || secondary.relationshipStatus,
+              gender: primary.gender || secondary.gender,
+              dateOfBirth: primary.dateOfBirth || secondary.dateOfBirth,
+              occupation: primary.occupation || secondary.occupation,
+              assignedTo: primary.assignedTo || secondary.assignedTo,
+          };
+
+          setCustomers(prev => {
+              const filtered = prev.filter(c => c.phone !== secondary.phone);
+              return filtered.map(c => {
+                  if (c.phone === primary.phone) {
+                      return {
+                          ...c,
+                          ...mergedData,
+                          tags: newTags,
+                          generalNotes: newNotes,
+                          leads: [...c.leads, ...secondary.leads],
+                          orders: [...(c.orders || []), ...(secondary.orders || [])]
+                      };
+                  }
+                  return c;
+              });
+          });
+
+          setLeads(prev => prev.map(l => l.phone === secondary.phone ? { ...l, phone: primary.phone } : l));
+          setOrders(prev => prev.map(o => o.customerPhone === secondary.phone ? { ...o, customerPhone: primary.phone } : o));
+          setCskhItems(prev => prev.map(c => c.customerPhone === secondary.phone ? { ...c, customerPhone: primary.phone } : c));
+          setReExaminations(prev => prev.map(r => r.customerPhone === secondary.phone ? { ...r, customerPhone: primary.phone } : r));
+
+          if (selectedCustomer?.phone === secondary.phone) {
+              setSelectedCustomer(null);
+          } else if (selectedCustomer?.phone === primary.phone) {
+              setSelectedCustomer(prev => prev ? {
+                  ...prev,
+                  ...mergedData,
+                  tags: newTags,
+                  generalNotes: newNotes,
+                  leads: [...prev.leads, ...secondary.leads],
+                  orders: [...(prev.orders || []), ...(secondary.orders || [])]
+              } : null);
+          }
+
+          if (!useLocalOnly) {
+              // Update primary customer tags and notes in DB
+              const dbUpdates: any = {
+                  tags: newTags,
+                  general_notes: newNotes,
+              };
+              if (mergedData.email) dbUpdates.email = mergedData.email;
+              if (mergedData.address) dbUpdates.address = mergedData.address;
+              if (mergedData.location) dbUpdates.location = mergedData.location;
+              if (mergedData.province) dbUpdates.province = mergedData.province;
+              if (mergedData.district) dbUpdates.district = mergedData.district;
+              if (mergedData.ward) dbUpdates.ward = mergedData.ward;
+              if (mergedData.source) dbUpdates.source = mergedData.source;
+              if (mergedData.customerGroup) dbUpdates.customer_group = mergedData.customerGroup;
+              if (mergedData.relationshipStatus) dbUpdates.relationship_status = mergedData.relationshipStatus;
+              if (mergedData.gender) dbUpdates.gender = mergedData.gender;
+              if (mergedData.dateOfBirth) dbUpdates.date_of_birth = mergedData.dateOfBirth;
+              if (mergedData.occupation) dbUpdates.occupation = mergedData.occupation;
+              if (mergedData.assignedTo) dbUpdates.assigned_to = mergedData.assignedTo;
+
+              await supabase.from('customers').update(dbUpdates).eq('phone', primary.phone);
+          }
+
+          setIsRefreshing(false);
+          alert("Gộp khách hàng thành công!");
+      } catch (err) {
+          setIsRefreshing(false);
+          alert(formatErrorMessage(err));
       }
   };
 
@@ -2150,6 +2475,7 @@ function AppContent() {
                     onAddCustomer={() => { setCustomerToEdit(null); setIsCustomerFormOpen(true); }}
                     onDeleteCustomer={handleDeleteCustomer}
                     onBulkDelete={handleBulkDeleteCustomers}
+                    onMergeCustomers={handleMergeCustomers}
                     sources={sources}
                     relationships={relationships}
                     customerGroups={customerGroups}
@@ -2405,6 +2731,14 @@ function AppContent() {
               lead={leadToComplete}
               onClose={() => setLeadToComplete(null)}
               onConfirm={executeLeadCompletion}
+          />
+      )}
+
+      {reExamToComplete && (
+          <CompleteReExamModal 
+              reExam={reExamToComplete}
+              onClose={() => setReExamToComplete(null)}
+              onConfirm={executeReExamCompletion}
           />
       )}
 

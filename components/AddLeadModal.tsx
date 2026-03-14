@@ -27,18 +27,25 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ sales, customers, sources, 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
     
-    if (id === 'name') {
-      setName(value);
-    } else if (id === 'phone') {
-      setPhone(value);
+    let finalValue = value;
+    if (id === 'phone') {
+        finalValue = value.replace(/[\s\-]/g, '');
+        if (finalValue.startsWith('+84')) {
+            finalValue = '0' + finalValue.slice(3);
+        } else if (finalValue.startsWith('84')) {
+            finalValue = '0' + finalValue.slice(2);
+        }
+        setPhone(finalValue);
+    } else if (id === 'name') {
+        setName(value);
     }
 
     if (id === 'name' || id === 'phone') {
-        if (value.trim().length > 1) {
-            const lowercasedValue = value.toLowerCase();
+        if (finalValue.trim().length > 1) {
+            const lowercasedValue = finalValue.toLowerCase();
             const results = customers.filter(c => 
                 c.name.toLowerCase().includes(lowercasedValue) || 
-                c.phone.includes(value)
+                c.phone.includes(finalValue)
             ).slice(0, 5); // Limit results to 5
             setSearchResults(results);
             setActiveSearch(id as 'name' | 'phone');

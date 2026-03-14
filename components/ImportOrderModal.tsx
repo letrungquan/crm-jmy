@@ -79,7 +79,10 @@ const ImportOrderModal: React.FC<ImportOrderModalProps> = ({ existingOrders, onC
           const dienThoaiRaw = normalizedRow['dien_thoai'] || normalizedRow['so_dien_thoai'] || normalizedRow['sdt'] || '';
           
           // Lọc bỏ những khách không có SĐT
-          const cleanPhone = dienThoaiRaw.toString().replace(/[^0-9]/g, '');
+          let cleanPhone = dienThoaiRaw.toString().replace(/[^0-9]/g, '');
+          if (cleanPhone.startsWith('84')) {
+              cleanPhone = '0' + cleanPhone.slice(2);
+          }
           if (!cleanPhone || cleanPhone.length < 8) {
               continue; // Bỏ qua dòng này nếu không có SĐT hợp lệ
           }

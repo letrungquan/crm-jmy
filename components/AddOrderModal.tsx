@@ -22,7 +22,13 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({ sales, customers, onClose
   const [activeSearch, setActiveSearch] = useState(false);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
+    let val = e.target.value;
+    val = val.replace(/[\s\-]/g, '');
+    if (val.startsWith('+84')) {
+        val = '0' + val.slice(3);
+    } else if (val.startsWith('84')) {
+        val = '0' + val.slice(2);
+    }
     setPhone(val);
     if (val.length > 2) {
         const results = customers.filter(c => c.phone.includes(val) || c.name.toLowerCase().includes(val.toLowerCase())).slice(0, 5);

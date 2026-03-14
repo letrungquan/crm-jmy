@@ -122,6 +122,41 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
       }
   };
 
+  const getPaginationItems = () => {
+      const items = [];
+      const maxVisiblePages = 5;
+      
+      if (totalPages <= maxVisiblePages) {
+          for (let i = 1; i <= totalPages; i++) {
+              items.push(i);
+          }
+      } else {
+          items.push(1);
+          if (currentPage > 3) {
+              items.push('...');
+          }
+          
+          let start = Math.max(2, currentPage - 1);
+          let end = Math.min(totalPages - 1, currentPage + 1);
+          
+          if (currentPage <= 3) {
+              end = 4;
+          } else if (currentPage >= totalPages - 2) {
+              start = totalPages - 3;
+          }
+          
+          for (let i = start; i <= end; i++) {
+              items.push(i);
+          }
+          
+          if (currentPage < totalPages - 2) {
+              items.push('...');
+          }
+          items.push(totalPages);
+      }
+      return items;
+  };
+
   return (
     <div className="p-4 sm:p-6 h-full flex flex-col bg-slate-50">
        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -356,13 +391,13 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
             {/* Pagination Footer */}
             {totalPages > 1 && (
                 <div className="bg-white px-4 py-3 border-t border-slate-200 flex items-center justify-between sm:px-6">
-                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                        <div>
-                            <p className="text-sm text-slate-700">
+                    <div className="hidden sm:flex-1 sm:flex sm:flex-wrap sm:items-center sm:justify-between gap-4">
+                        <div className="flex-shrink-0">
+                            <p className="text-sm text-slate-700 whitespace-nowrap">
                                 Hiển thị <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> đến <span className="font-medium">{Math.min(currentPage * itemsPerPage, sortedOrders.length)}</span> trong số <span className="font-medium">{sortedOrders.length}</span> đơn hàng
                             </p>
                         </div>
-                        <div>
+                        <div className="overflow-x-auto max-w-full pb-1">
                             <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                                 <button
                                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
@@ -374,14 +409,20 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                                         <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                                     </svg>
                                 </button>
-                                {Array.from({ length: totalPages }).map((_, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => setCurrentPage(i + 1)}
-                                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${currentPage === i + 1 ? 'z-10 bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'}`}
-                                    >
-                                        {i + 1}
-                                    </button>
+                                {getPaginationItems().map((item, index) => (
+                                    item === '...' ? (
+                                        <span key={`ellipsis-${index}`} className="relative inline-flex items-center px-4 py-2 border border-slate-300 bg-white text-sm font-medium text-slate-700">
+                                            ...
+                                        </span>
+                                    ) : (
+                                        <button
+                                            key={`page-${item}`}
+                                            onClick={() => setCurrentPage(item as number)}
+                                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${currentPage === item ? 'z-10 bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'}`}
+                                        >
+                                            {item}
+                                        </button>
+                                    )
                                 ))}
                                 <button
                                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
