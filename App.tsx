@@ -24,6 +24,7 @@ import UserGuideView from './components/UserGuideView';
 // Modals
 import LeadDetailModal from './components/LeadDetailModal';
 import AddLeadModal from './components/AddLeadModal';
+import AddCskhModal from './components/AddCskhModal';
 import AddOrderModal from './components/AddOrderModal';
 import ImportOrderModal from './components/ImportOrderModal';
 import CustomerFormModal from './components/CustomerFormModal';
@@ -80,6 +81,7 @@ function AppContent() {
   // --- Modals State ---
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
+  const [isAddCskhModalOpen, setIsAddCskhModalOpen] = useState(false);
   const [leadToComplete, setLeadToComplete] = useState<Lead | null>(null);
   const [reExamToComplete, setReExamToComplete] = useState<ReExamination | null>(null);
   
@@ -972,12 +974,12 @@ function AppContent() {
 
           const { error } = await supabase.from('orders').insert([{
               customer_phone: newOrder.customerPhone,
-              service: newOrder.service,
-              revenue: newOrder.revenue,
+              service: newOrder.service || null,
+              revenue: newOrder.revenue || 0,
               created_at: newOrder.createdAt,
               status: newOrder.status,
-              assigned_to: newOrder.assignedTo,
-              customer_name: newOrder.customerName
+              assigned_to: newOrder.assignedTo || null,
+              customer_name: newOrder.customerName || null
           }]);
           
           if (error) {
@@ -985,11 +987,11 @@ function AppContent() {
                   console.warn("Schema cache error, falling back to old schema");
                   const { error: fallbackError } = await supabase.from('orders').insert([{
                       customer_phone: newOrder.customerPhone,
-                      service: newOrder.service,
-                      revenue: newOrder.revenue,
+                      service: newOrder.service || null,
+                      revenue: newOrder.revenue || 0,
                       created_at: newOrder.createdAt,
                       status: newOrder.status,
-                      assigned_to: newOrder.assignedTo
+                      assigned_to: newOrder.assignedTo || null
                   }]);
                   if (fallbackError) throw fallbackError;
                   alert("Đã tạo đơn hàng! Lưu ý: Database đang thiếu cột 'customer_name'. Vui lòng vào Cài đặt -> Copy mã SQL và chạy trong Supabase để cập nhật.");
@@ -1173,13 +1175,13 @@ function AppContent() {
           const { error } = await supabase.from('orders').insert(ordersToInsert.map(o => ({
               customer_phone: o.customerPhone,
               service: o.service || 'Đơn hàng KiotViet',
-              revenue: o.revenue,
+              revenue: o.revenue || 0,
               created_at: o.createdAt,
               status: o.status,
-              assigned_to: o.assignedTo,
-              external_id: o.externalId,
-              source: o.source,
-              customer_name: o.customerName
+              assigned_to: o.assignedTo || null,
+              external_id: o.externalId || null,
+              source: o.source || null,
+              customer_name: o.customerName || null
           })));
           
           if (error) {
@@ -1188,10 +1190,10 @@ function AppContent() {
                   const { error: fallbackError } = await supabase.from('orders').insert(ordersToInsert.map(o => ({
                       customer_phone: o.customerPhone,
                       service: o.service || 'Đơn hàng KiotViet',
-                      revenue: o.revenue,
+                      revenue: o.revenue || 0,
                       created_at: o.createdAt,
                       status: o.status,
-                      assigned_to: o.assignedTo
+                      assigned_to: o.assignedTo || null
                   })));
                   if (fallbackError) throw fallbackError;
                   alert("Đã nhập đơn hàng thành công! Tuy nhiên, database của bạn đang thiếu một số cột mới (customer_name, external_id, source). Vui lòng vào mục Cài đặt -> Copy mã SQL và chạy trong Supabase để cập nhật đầy đủ.");
@@ -1353,12 +1355,17 @@ function AppContent() {
               customer_phone: targetLead.phone,
               service: actualService,
               status: 'cskh_new',
-              assigned_to: targetLead.assignedTo,
-              original_lead_id: targetLead.id,
-              doctor_name: doctorName,
+              assigned_to: targetLead.assignedTo || null,
+              original_lead_id: targetLead.id || null,
+              doctor_name: doctorName || null,
               re_examination_date: reExaminationDate || null
           }]);
-          if (cskhError) throw cskhError;
+          if (cskhError) {
+              if (cskhError.message.includes('column "doctor_name" of relation "cskh" does not exist') || cskhError.message.includes('column "re_examination_date"')) {
+                  throw new Error("Vui lòng vào Cài đặt -> Cập nhật CSDL và chạy đoạn mã SQL để thêm các cột mới cho bảng CSKH.");
+              }
+              throw cskhError;
+          }
 
           if (reExaminationDate) {
               const { error: reExamError } = await supabase.from('re_examinations').insert([{
@@ -1368,11 +1375,11 @@ function AppContent() {
                   date: reExaminationDate,
                   appointment_time: null,
                   service: reExamService || actualService,
-                  doctor_name: doctorName,
-                  assigned_to: targetLead.assignedTo,
+                  doctor_name: doctorName || null,
+                  assigned_to: targetLead.assignedTo || null,
                   status: 'pending',
-                  note: reExamNote || '',
-                  potential_revenue: reExamRevenue
+                  note: reExamNote || null,
+                  potential_revenue: reExamRevenue || null
               }]);
               if (reExamError) throw reExamError;
           }
@@ -1456,10 +1463,10 @@ function AppContent() {
       try {
           const { error } = await supabase.from('cskh').update({
               status: itemToSave.status,
-              assigned_to: itemToSave.assignedTo,
-              doctor_name: itemToSave.doctorName,
-              re_examination_date: itemToSave.reExaminationDate,
-              note: itemToSave.note,
+              assigned_to: itemToSave.assignedTo || null,
+              doctor_name: itemToSave.doctorName || null,
+              re_examination_date: itemToSave.reExaminationDate || null,
+              note: itemToSave.note || null,
               updated_at: now
           }).eq('id', itemToSave.id);
           
@@ -1579,8 +1586,7 @@ function AppContent() {
                   id: `note_${Date.now()}`,
                   re_examination_id: targetReExam.id,
                   content: updatedNoteContent,
-                  created_by: currentUser,
-                  created_at: now
+                  created_by: currentUser
               }]);
           }
 
@@ -1588,17 +1594,19 @@ function AppContent() {
           const { error: cskhError } = await supabase.from('cskh').insert([{
               id: newCskhItem.id,
               customer_phone: newCskhItem.customerPhone,
-              customer_name: newCskhItem.customerName,
               service: newCskhItem.service,
               status: newCskhItem.status,
-              assigned_to: newCskhItem.assignedTo,
-              created_at: now,
-              updated_at: now,
-              doctor_name: newCskhItem.doctorName,
-              re_examination_date: newCskhItem.reExaminationDate
+              assigned_to: newCskhItem.assignedTo || null,
+              doctor_name: newCskhItem.doctorName || null,
+              re_examination_date: newCskhItem.reExaminationDate || null
           }]);
 
-          if (cskhError) throw cskhError;
+          if (cskhError) {
+              if (cskhError.message.includes('column "doctor_name" of relation "cskh" does not exist') || cskhError.message.includes('column "re_examination_date"')) {
+                  throw new Error("Vui lòng vào Cài đặt -> Cập nhật CSDL và chạy đoạn mã SQL để thêm các cột mới cho bảng CSKH.");
+              }
+              throw cskhError;
+          }
 
           // 4. Create new ReExamination if scheduled
           if (reExaminationDate) {
@@ -1608,12 +1616,11 @@ function AppContent() {
                   customer_name: targetReExam.customerName,
                   date: reExaminationDate,
                   service: reExamService || actualService,
-                  doctor_name: doctorName,
-                  assigned_to: targetReExam.assignedTo,
+                  doctor_name: doctorName || null,
+                  assigned_to: targetReExam.assignedTo || null,
                   status: 'pending',
-                  created_at: now,
-                  potential_revenue: reExamRevenue,
-                  note: reExamNote
+                  potential_revenue: reExamRevenue || null,
+                  note: reExamNote || null
               }]);
               if (newReExamError) throw newReExamError;
           }
@@ -1642,14 +1649,14 @@ function AppContent() {
 
       try {
           const { error } = await supabase.from('re_examinations').update({
-              service: itemToSave.service,
-              date: itemToSave.date,
-              appointment_time: itemToSave.appointmentTime,
-              doctor_name: itemToSave.doctorName,
-              assigned_to: itemToSave.assignedTo,
-              note: itemToSave.note,
+              service: itemToSave.service || null,
+              date: itemToSave.date || null,
+              appointment_time: itemToSave.appointmentTime || null,
+              doctor_name: itemToSave.doctorName || null,
+              assigned_to: itemToSave.assignedTo || null,
+              note: itemToSave.note || null,
               status: itemToSave.status,
-              potential_revenue: itemToSave.potentialRevenue,
+              potential_revenue: itemToSave.potentialRevenue || null,
               updated_at: now
           }).eq('id', itemToSave.id);
           
@@ -1726,14 +1733,14 @@ function AppContent() {
               id: newReExam.id,
               customer_phone: data.customerPhone,
               customer_name: data.customerName,
-              date: data.date,
-              appointment_time: data.appointmentTime,
-              service: data.service,
-              doctor_name: data.doctorName,
-              assigned_to: data.assignedTo,
-              note: data.note,
+              date: data.date || null,
+              appointment_time: data.appointmentTime || null,
+              service: data.service || null,
+              doctor_name: data.doctorName || null,
+              assigned_to: data.assignedTo || null,
+              note: data.note || null,
               status: 'pending',
-              potential_revenue: data.potentialRevenue
+              potential_revenue: data.potentialRevenue || null
           }]);
           
           if (error) throw error;
@@ -1775,35 +1782,35 @@ function AppContent() {
 
       try {
           const dbData = {
-              name: data.name,
+              name: data.name || null,
               phone: data.phone,
-              email: data.email,
-              address: data.address,
-              location: data.location,
-              province: data.province,
-              district: data.district,
-              ward: data.ward,
-              tags: data.tags,
-              general_notes: data.generalNotes,
-              source: data.source,
-              assigned_to: data.assignedTo,
-              customer_group: data.customerGroup,
-              profile_completeness: data.profileCompleteness,
-              relationship_status: data.relationshipStatus,
-              gender: data.gender,
-              date_of_birth: data.dateOfBirth,
-              occupation: data.occupation,
-              ip: data.ip,
-              user_agent: data.userAgent,
-              fbp: data.fbp,
-              fbc: data.fbc,
-              ttclid: data.ttclid,
-              ttp: data.ttp,
-              source_url: data.sourceUrl,
-              utm_source: data.utmSource,
-              utm_medium: data.utmMedium,
-              event_id: data.eventId,
-              external_id: data.externalId
+              email: data.email || null,
+              address: data.address || null,
+              location: data.location || null,
+              province: data.province || null,
+              district: data.district || null,
+              ward: data.ward || null,
+              tags: data.tags || null,
+              general_notes: data.generalNotes || null,
+              source: data.source || null,
+              assigned_to: data.assignedTo || null,
+              customer_group: data.customerGroup || null,
+              profile_completeness: data.profileCompleteness || null,
+              relationship_status: data.relationshipStatus || null,
+              gender: data.gender || null,
+              date_of_birth: data.dateOfBirth || null,
+              occupation: data.occupation || null,
+              ip: data.ip || null,
+              user_agent: data.userAgent || null,
+              fbp: data.fbp || null,
+              fbc: data.fbc || null,
+              ttclid: data.ttclid || null,
+              ttp: data.ttp || null,
+              source_url: data.sourceUrl || null,
+              utm_source: data.utmSource || null,
+              utm_medium: data.utmMedium || null,
+              event_id: data.eventId || null,
+              external_id: data.externalId || null
           };
           const { error } = await supabase.from('customers').insert([dbData]);
           if (error) throw error;
@@ -1843,35 +1850,35 @@ function AppContent() {
 
       try {
           const dbData: any = {};
-          if (data.name !== undefined) dbData.name = data.name;
+          if (data.name !== undefined) dbData.name = data.name || null;
           if (data.phone !== undefined) dbData.phone = data.phone;
-          if (data.email !== undefined) dbData.email = data.email;
-          if (data.address !== undefined) dbData.address = data.address;
-          if (data.location !== undefined) dbData.location = data.location;
-          if (data.province !== undefined) dbData.province = data.province;
-          if (data.district !== undefined) dbData.district = data.district;
-          if (data.ward !== undefined) dbData.ward = data.ward;
-          if (data.tags !== undefined) dbData.tags = data.tags;
-          if (data.generalNotes !== undefined) dbData.general_notes = data.generalNotes;
-          if (data.source !== undefined) dbData.source = data.source;
-          if (data.assignedTo !== undefined) dbData.assigned_to = data.assignedTo;
-          if (data.customerGroup !== undefined) dbData.customer_group = data.customerGroup;
-          if (data.profileCompleteness !== undefined) dbData.profile_completeness = data.profileCompleteness;
-          if (data.relationshipStatus !== undefined) dbData.relationship_status = data.relationshipStatus;
-          if (data.gender !== undefined) dbData.gender = data.gender;
-          if (data.dateOfBirth !== undefined) dbData.date_of_birth = data.dateOfBirth;
-          if (data.occupation !== undefined) dbData.occupation = data.occupation;
-          if (data.ip !== undefined) dbData.ip = data.ip;
-          if (data.userAgent !== undefined) dbData.user_agent = data.userAgent;
-          if (data.fbp !== undefined) dbData.fbp = data.fbp;
-          if (data.fbc !== undefined) dbData.fbc = data.fbc;
-          if (data.ttclid !== undefined) dbData.ttclid = data.ttclid;
-          if (data.ttp !== undefined) dbData.ttp = data.ttp;
-          if (data.sourceUrl !== undefined) dbData.source_url = data.sourceUrl;
-          if (data.utmSource !== undefined) dbData.utm_source = data.utmSource;
-          if (data.utmMedium !== undefined) dbData.utm_medium = data.utmMedium;
-          if (data.eventId !== undefined) dbData.event_id = data.eventId;
-          if (data.externalId !== undefined) dbData.external_id = data.externalId;
+          if (data.email !== undefined) dbData.email = data.email || null;
+          if (data.address !== undefined) dbData.address = data.address || null;
+          if (data.location !== undefined) dbData.location = data.location || null;
+          if (data.province !== undefined) dbData.province = data.province || null;
+          if (data.district !== undefined) dbData.district = data.district || null;
+          if (data.ward !== undefined) dbData.ward = data.ward || null;
+          if (data.tags !== undefined) dbData.tags = data.tags || null;
+          if (data.generalNotes !== undefined) dbData.general_notes = data.generalNotes || null;
+          if (data.source !== undefined) dbData.source = data.source || null;
+          if (data.assignedTo !== undefined) dbData.assigned_to = data.assignedTo || null;
+          if (data.customerGroup !== undefined) dbData.customer_group = data.customerGroup || null;
+          if (data.profileCompleteness !== undefined) dbData.profile_completeness = data.profileCompleteness || null;
+          if (data.relationshipStatus !== undefined) dbData.relationship_status = data.relationshipStatus || null;
+          if (data.gender !== undefined) dbData.gender = data.gender || null;
+          if (data.dateOfBirth !== undefined) dbData.date_of_birth = data.dateOfBirth || null;
+          if (data.occupation !== undefined) dbData.occupation = data.occupation || null;
+          if (data.ip !== undefined) dbData.ip = data.ip || null;
+          if (data.userAgent !== undefined) dbData.user_agent = data.userAgent || null;
+          if (data.fbp !== undefined) dbData.fbp = data.fbp || null;
+          if (data.fbc !== undefined) dbData.fbc = data.fbc || null;
+          if (data.ttclid !== undefined) dbData.ttclid = data.ttclid || null;
+          if (data.ttp !== undefined) dbData.ttp = data.ttp || null;
+          if (data.sourceUrl !== undefined) dbData.source_url = data.sourceUrl || null;
+          if (data.utmSource !== undefined) dbData.utm_source = data.utmSource || null;
+          if (data.utmMedium !== undefined) dbData.utm_medium = data.utmMedium || null;
+          if (data.eventId !== undefined) dbData.event_id = data.eventId || null;
+          if (data.externalId !== undefined) dbData.external_id = data.externalId || null;
 
           if (phoneChanged) {
               // 1. Fetch current customer data
@@ -2256,6 +2263,70 @@ function AppContent() {
       }
   };
 
+  const handleAddCskh = async (cskhData: any) => {
+    if (!hasPermission('cskh', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM CSKH."); return; }
+    const now = new Date().toISOString();
+    const newCskhId = `cskh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const newCskhItem: CskhItem = {
+        id: newCskhId,
+        customerPhone: cskhData.customerPhone,
+        customerName: cskhData.customerName,
+        service: cskhData.service,
+        status: 'cskh_new',
+        assignedTo: cskhData.assignedTo || currentUser,
+        doctorName: cskhData.doctorName,
+        reExaminationDate: cskhData.reExaminationDate || null,
+        note: cskhData.note,
+        createdAt: now,
+        updatedAt: now
+    };
+    
+    setCskhItems(prev => [newCskhItem, ...prev]);
+    setIsAddCskhModalOpen(false);
+    
+    if (useLocalOnly) {
+        setLocalCskh(prev => [newCskhItem, ...prev]);
+        return;
+    }
+    
+    try {
+        // Ensure customer exists
+        const { error: custError } = await supabase.from('customers').insert([{
+            phone: cskhData.customerPhone,
+            name: cskhData.customerName || 'Khách hàng',
+            creator: currentUser,
+            assigned_to: cskhData.assignedTo || currentUser
+        }]);
+        
+        if (custError && custError.code !== '23505') {
+            throw new Error(`Lỗi dữ liệu khách hàng: ${custError.message}`);
+        }
+
+        const { error } = await supabase.from('cskh').insert([{
+            id: newCskhId,
+            customer_phone: cskhData.customerPhone,
+            service: cskhData.service,
+            status: 'cskh_new',
+            assigned_to: cskhData.assignedTo || currentUser,
+            doctor_name: cskhData.doctorName || null,
+            re_examination_date: cskhData.reExaminationDate || null,
+            note: cskhData.note || null
+        }]);
+
+        if (error) {
+            if (error.message.includes('column "doctor_name" of relation "cskh" does not exist') || error.message.includes('column "re_examination_date"')) {
+                throw new Error("Vui lòng vào Cài đặt -> Cập nhật CSDL và chạy đoạn mã SQL để thêm các cột mới cho bảng CSKH.");
+            }
+            throw error;
+        }
+    } catch (err) {
+        alert(formatErrorMessage(err));
+        // Revert optimistic update
+        setCskhItems(prev => prev.filter(c => c.id !== newCskhId));
+    }
+  };
+
   const handleAddLead = async (leadData: any) => {
     if (!hasPermission('leads', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM CƠ HỘI."); return; }
     const now = new Date().toISOString();
@@ -2295,14 +2366,14 @@ function AppContent() {
             id: newLeadId,
             name: leadData.name,
             phone: leadData.phone,
-            source: leadData.source,
-            assigned_to: leadData.assignedTo,
+            source: leadData.source || null,
+            assigned_to: leadData.assignedTo || null,
             status: leadData.status,
-            service: leadData.service,
-            description: leadData.description,
-            potential_revenue: leadData.potentialRevenue,
-            projected_appointment_date: leadData.projectedAppointmentDate,
-            appointment_date: leadData.appointmentDate,
+            service: leadData.service || null,
+            description: leadData.description || null,
+            potential_revenue: leadData.potentialRevenue || null,
+            projected_appointment_date: leadData.projectedAppointmentDate || null,
+            appointment_date: leadData.appointmentDate || null,
             created_at: now,
             updated_at: now
         }]);
@@ -2331,14 +2402,14 @@ function AppContent() {
           const { error } = await supabase.from('leads').update({
               name: leadToSave.name,
               phone: leadToSave.phone,
-              source: leadToSave.source,
-              assigned_to: leadToSave.assignedTo,
+              source: leadToSave.source || null,
+              assigned_to: leadToSave.assignedTo || null,
               status: leadToSave.status,
-              service: leadToSave.service,
-              description: leadToSave.description,
-              potential_revenue: leadToSave.potentialRevenue,
-              projected_appointment_date: leadToSave.projectedAppointmentDate,
-              appointment_date: leadToSave.appointmentDate,
+              service: leadToSave.service || null,
+              description: leadToSave.description || null,
+              potential_revenue: leadToSave.potentialRevenue || null,
+              projected_appointment_date: leadToSave.projectedAppointmentDate || null,
+              appointment_date: leadToSave.appointmentDate || null,
               updated_at: now
           }).eq('id', leadToSave.id);
           
@@ -2453,6 +2524,7 @@ function AppContent() {
                     onUpdateCskhStatus={handleUpdateCskhStatus}
                     onSelectCskh={setSelectedCskh}
                     onDeleteCskh={setDeleteCskhTarget}
+                    onAddCskh={() => setIsAddCskhModalOpen(true)}
                 />
             )}
 
@@ -2679,6 +2751,15 @@ function AppContent() {
              sources={sources}
              onClose={() => setIsAddLeadModalOpen(false)}
              onSave={handleAddLead}
+          />
+      )}
+
+      {isAddCskhModalOpen && (
+          <AddCskhModal
+              customers={customers}
+              sales={sales}
+              onClose={() => setIsAddCskhModalOpen(false)}
+              onAdd={handleAddCskh}
           />
       )}
 

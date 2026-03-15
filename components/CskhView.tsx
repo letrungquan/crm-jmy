@@ -10,10 +10,11 @@ interface CskhViewProps {
   onUpdateCskhStatus: (cskhId: string, newStatusId: string) => void;
   onDeleteCskh?: (cskhId: string) => void;
   onSelectCskh: (item: CskhItem) => void;
+  onAddCskh?: () => void;
 }
 
-const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhStatus, onDeleteCskh, onSelectCskh }) => {
-  const { canEdit } = usePermissions();
+const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhStatus, onDeleteCskh, onSelectCskh, onAddCskh }) => {
+  const { canEdit, canCreate } = usePermissions();
   const [draggedOverColumn, setDraggedOverColumn] = React.useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,6 +90,17 @@ const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhSt
               Danh sách
             </button>
           </div>
+          {canCreate('cskh') && onAddCskh && (
+            <button
+              onClick={onAddCskh}
+              className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Thêm CSKH
+            </button>
+          )}
         </div>
       </div>
 
