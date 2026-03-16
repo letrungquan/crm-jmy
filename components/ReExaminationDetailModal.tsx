@@ -220,7 +220,7 @@ const ReExaminationDetailModal: React.FC<ReExaminationDetailModalProps> = ({ reE
                      </div>
                      <div className="flex space-x-2">
                        <textarea
-                         value={newNote}
+                         value={newNote || ''}
                          onChange={(e) => setNewNote(e.target.value)}
                          placeholder={isFeedback ? "Nhập nội dung phản hồi của khách hàng..." : "Thêm ghi chú tương tác..."}
                          rows={2}

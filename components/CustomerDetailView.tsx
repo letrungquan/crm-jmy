@@ -461,7 +461,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                      <textarea 
                                         className="w-full p-4 min-h-[100px] focus:outline-none text-slate-700 placeholder-slate-400 resize-none" 
                                         placeholder="Nhập nội dung trao đổi, ghi chú..."
-                                        value={newNote}
+                                        value={newNote || ''}
                                         onChange={(e) => setNewNote(e.target.value)}
                                      ></textarea>
                                     <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex justify-between items-center flex-wrap gap-3">
@@ -669,7 +669,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                             </button>
                                         ))}
                                     </div>
-                                    <textarea value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} className="w-full p-3 border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 text-sm mb-4" rows={3} placeholder="Nội dung phản hồi..."></textarea>
+                                    <textarea value={feedbackText || ''} onChange={(e) => setFeedbackText(e.target.value)} className="w-full p-3 border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 text-sm mb-4" rows={3} placeholder="Nội dung phản hồi..."></textarea>
                                     <div className="flex justify-between items-center">
                                          {noteTargets.length > 0 && (
                                             <select value={selectedTargetForNote} onChange={(e) => setSelectedTargetForNote(e.target.value)} className="bg-white border border-slate-300 rounded text-xs p-1.5 max-w-[200px] truncate">

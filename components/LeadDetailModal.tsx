@@ -84,6 +84,19 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
     } else if (name === 'reExaminationDate') {
       // Handle re-examination date
       setCurrentLead(prev => ({ ...prev, [name]: value ? `${value}T12:00:00` : null}));
+    } else if (name === 'appointmentDate') {
+      // value is "YYYY-MM-DDTHH:mm", we need to preserve the exact local time selected by the user
+      // by appending the local timezone offset, or just storing it as a local ISO string
+      if (value) {
+        const dateObj = new Date(value);
+        // Create an ISO string that represents the exact local time selected
+        // We do this by adjusting for the timezone offset before calling toISOString
+        const tzOffset = dateObj.getTimezoneOffset() * 60000; // offset in milliseconds
+        const localISOTime = (new Date(dateObj.getTime() - tzOffset)).toISOString().slice(0, -1); // remove the 'Z'
+        setCurrentLead(prev => ({ ...prev, [name]: localISOTime }));
+      } else {
+        setCurrentLead(prev => ({ ...prev, [name]: null }));
+      }
     } else {
       setCurrentLead(prev => ({...prev, [name]: value}));
     }
@@ -290,7 +303,7 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
                    <textarea
                     name="description"
                     rows={3}
-                    value={currentLead.description}
+                    value={currentLead.description || ''}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
                   />
@@ -333,7 +346,7 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
                    </div>
                    <div className="flex space-x-2">
                      <textarea
-                       value={newNote}
+                       value={newNote || ''}
                        onChange={(e) => setNewNote(e.target.value)}
                        placeholder={isFeedback ? "Nhập nội dung phản hồi của khách hàng..." : "Thêm ghi chú tương tác..."}
                        rows={2}

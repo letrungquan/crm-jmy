@@ -288,7 +288,7 @@ function AppContent() {
                   const formatted: CskhItem = {
                       id: data.id,
                       customerPhone: data.customer_phone,
-                      customerName: existing?.customerName || 'Khách hàng',
+                      customerName: existing?.customerName || customers.find(c => c.phone === data.customer_phone)?.name || 'Khách hàng',
                       service: data.service,
                       status: data.status,
                       assignedTo: data.assigned_to,
@@ -517,6 +517,17 @@ function AppContent() {
         
         if (profiles.length > 0) setSales(profiles);
 
+        // 1.5 Fetch Customers early to use their names
+        let customerDetails: any[] = [];
+        try {
+            let customersQuery = supabase.from('customers').select('*');
+            if (!hasPermission('customers', 'view_all')) {
+                customersQuery = customersQuery.eq('creator', currentUser);
+            }
+            const { data } = await customersQuery;
+            if (data) customerDetails = data;
+        } catch (e) { console.warn("Lỗi fetch customers", e); }
+
         // 2. Fetch Leads
         let leadsQuery = supabase.from('leads').select(`
             *,
@@ -526,12 +537,60 @@ function AppContent() {
             leadsQuery = leadsQuery.eq('assigned_to', currentUser);
         }
         const { data: leadsData, error: leadsError } = await leadsQuery.order('created_at', { ascending: false });
-        
         if (leadsError) throw leadsError;
-        
+
+        // 3. Fetch CSKH
+        let cskhQuery = supabase.from('cskh').select('*');
+        if (!hasPermission('cskh', 'view_all')) {
+            cskhQuery = cskhQuery.eq('assigned_to', currentUser);
+        }
+        const { data: cskhData, error: cskhError } = await cskhQuery.order('created_at', { ascending: false });
+        if (cskhError) throw cskhError;
+
+        // 4. Fetch Orders
+        let ordersQuery = supabase.from('orders').select('*');
+        if (!hasPermission('orders', 'view_all')) {
+            ordersQuery = ordersQuery.eq('assigned_to', currentUser);
+        }
+        const { data: ordersData, error: ordersError } = await ordersQuery.order('created_at', { ascending: false });
+        if (ordersError) throw ordersError;
+
+        // 5. Fetch Re-examinations
+        let reExamQuery = supabase.from('re_examinations').select('*');
+        if (!hasPermission('appointments', 'view_all')) {
+            reExamQuery = reExamQuery.eq('assigned_to', currentUser);
+        }
+        const { data: reExamData } = await reExamQuery;
+
+        // --- Fetch missing customers for names ---
+        const allPhones = new Set<string>();
+        (leadsData || []).forEach(l => { if (l.phone) allPhones.add(l.phone); });
+        (cskhData || []).forEach(c => { if (c.customer_phone) allPhones.add(c.customer_phone); });
+        (ordersData || []).forEach(o => { if (o.customer_phone) allPhones.add(o.customer_phone); });
+        (reExamData || []).forEach(r => { if (r.customer_phone) allPhones.add(r.customer_phone); });
+
+        const existingPhones = new Set(customerDetails.map(c => c.phone));
+        const missingPhones = Array.from(allPhones).filter(p => !existingPhones.has(p));
+
+        if (missingPhones.length > 0) {
+            try {
+                // Fetch in chunks of 1000 to avoid Supabase limits
+                for (let i = 0; i < missingPhones.length; i += 1000) {
+                    const chunk = missingPhones.slice(i, i + 1000);
+                    const { data: missingCustomers } = await supabase.from('customers').select('*').in('phone', chunk);
+                    if (missingCustomers) {
+                        customerDetails = [...customerDetails, ...missingCustomers];
+                    }
+                }
+            } catch (e) { console.warn("Lỗi fetch missing customers", e); }
+        }
+
+        const customerNameMap = new Map(customerDetails.map(c => [c.phone, c.name]));
+
+        // --- Format Data ---
         const formattedLeads: Lead[] = (leadsData || []).map(l => ({
             id: l.id,
-            name: l.name,
+            name: customerNameMap.get(l.phone) || l.name || 'Khách hàng',
             phone: l.phone,
             source: l.source,
             assignedTo: l.assigned_to,
@@ -556,14 +615,6 @@ function AppContent() {
         }));
         setLeads(formattedLeads);
 
-        // 3. Fetch CSKH
-        let cskhQuery = supabase.from('cskh').select('*');
-        if (!hasPermission('cskh', 'view_all')) {
-            cskhQuery = cskhQuery.eq('assigned_to', currentUser);
-        }
-        const { data: cskhData, error: cskhError } = await cskhQuery.order('created_at', { ascending: false });
-        if (cskhError) throw cskhError;
-        
         const formattedCskh: CskhItem[] = (cskhData || []).map(c => {
             const originalLead = formattedLeads.find(l => l.id === c.original_lead_id) || formattedLeads.find(l => l.phone === c.customer_phone);
             const leadNotes = originalLead?.notes || [];
@@ -572,7 +623,7 @@ function AppContent() {
             return {
                 id: c.id,
                 customerPhone: c.customer_phone,
-                customerName: originalLead?.name || 'Khách hàng',
+                customerName: customerNameMap.get(c.customer_phone) || originalLead?.name || 'Khách hàng',
                 service: c.service,
                 status: c.status,
                 assignedTo: c.assigned_to,
@@ -587,18 +638,10 @@ function AppContent() {
         });
         setCskhItems(formattedCskh);
 
-        // 4. Fetch Orders
-        let ordersQuery = supabase.from('orders').select('*');
-        if (!hasPermission('orders', 'view_all')) {
-            ordersQuery = ordersQuery.eq('assigned_to', currentUser);
-        }
-        const { data: ordersData, error: ordersError } = await ordersQuery.order('created_at', { ascending: false });
-        if (ordersError) throw ordersError;
-
         const formattedOrders: Order[] = (ordersData || []).map(o => ({
             id: o.id,
             customerPhone: o.customer_phone,
-            customerName: o.customer_name,
+            customerName: customerNameMap.get(o.customer_phone) || o.customer_name || 'Khách hàng',
             service: o.service,
             revenue: o.revenue,
             createdAt: o.created_at,
@@ -609,12 +652,6 @@ function AppContent() {
         }));
         setOrders(formattedOrders);
         
-        // 5. Fetch Re-examinations
-        let reExamQuery = supabase.from('re_examinations').select('*');
-        if (!hasPermission('appointments', 'view_all')) {
-            reExamQuery = reExamQuery.eq('assigned_to', currentUser);
-        }
-        const { data: reExamData } = await reExamQuery;
         const formattedReExams: ReExamination[] = (reExamData || []).map(r => {
             const originalLead = formattedLeads.find(l => l.phone === r.customer_phone);
             const leadNotes = originalLead?.notes || [];
@@ -634,7 +671,7 @@ function AppContent() {
             return {
                id: r.id,
                customerPhone: r.customer_phone,
-               customerName: r.customer_name,
+               customerName: customerNameMap.get(r.customer_phone) || r.customer_name || 'Khách hàng',
                date: r.date,
                appointmentTime: r.appointment_time,
                service: r.service,
@@ -689,14 +726,35 @@ function AppContent() {
                 });
             }
         });
+        formattedCskh.forEach(c => {
+            if (!customerMap.has(c.customerPhone)) {
+                customerMap.set(c.customerPhone, {
+                    name: c.customerName || 'Khách hàng',
+                    phone: c.customerPhone,
+                    leads: [],
+                    orders: [],
+                    generalNotes: '',
+                    tags: [],
+                    assignedTo: c.assignedTo || undefined
+                });
+            }
+        });
+        formattedReExams.forEach(r => {
+            if (!customerMap.has(r.customerPhone)) {
+                customerMap.set(r.customerPhone, {
+                    name: r.customerName || 'Khách hàng',
+                    phone: r.customerPhone,
+                    leads: [],
+                    orders: [],
+                    generalNotes: '',
+                    tags: [],
+                    assignedTo: r.assignedTo || undefined
+                });
+            }
+        });
 
         // Enriched Customer Data
         try {
-            let customersQuery = supabase.from('customers').select('*');
-            if (!hasPermission('customers', 'view_all')) {
-                customersQuery = customersQuery.eq('creator', currentUser);
-            }
-            const { data: customerDetails } = await customersQuery;
             if (customerDetails) {
                 customerDetails.forEach(c => {
                      const existing = customerMap.get(c.phone);

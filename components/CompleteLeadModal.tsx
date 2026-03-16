@@ -189,7 +189,7 @@ const CompleteLeadModal: React.FC<CompleteLeadModalProps> = ({ lead, onClose, on
                         <div>
                             <label className="block text-xs font-medium text-slate-500 mb-1">Ghi chú cho lần tới</label>
                             <textarea
-                                value={reExamNote}
+                                value={reExamNote || ''}
                                 onChange={(e) => setReExamNote(e.target.value)}
                                 rows={2}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-green-500 focus:border-green-500 text-sm"
@@ -203,7 +203,7 @@ const CompleteLeadModal: React.FC<CompleteLeadModalProps> = ({ lead, onClose, on
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Ghi chú thêm (Tùy chọn)</label>
                 <textarea 
-                    value={note}
+                    value={note || ''}
                     onChange={(e) => setNote(e.target.value)}
                     rows={2}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-green-500 focus:border-green-500 text-sm"

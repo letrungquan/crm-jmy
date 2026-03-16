@@ -543,7 +543,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customerToEdit, r
                 </div>
                  <div className="md:col-span-2">
                   <label htmlFor="generalNotes" className="block text-sm font-medium text-slate-700">Ghi chú chung</label>
-                  <textarea name="generalNotes" id="generalNotes" value={formData.generalNotes} onChange={handleChange} rows={3} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"/>
+                  <textarea name="generalNotes" id="generalNotes" value={formData.generalNotes || ''} onChange={handleChange} rows={3} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"/>
                 </div>
             </div>
 

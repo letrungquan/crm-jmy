@@ -239,7 +239,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer, sales
                                      <textarea 
                                         className="p-2 min-h-[80px] w-full focus:outline-none" 
                                         placeholder="Thêm trao đổi..."
-                                        value={newNote}
+                                        value={newNote || ''}
                                         onChange={(e) => setNewNote(e.target.value)}
                                      ></textarea>
                                     <div className="flex justify-between items-center pt-2 mt-2 border-t flex-wrap gap-2">

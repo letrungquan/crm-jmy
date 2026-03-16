@@ -185,7 +185,7 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ sales, customers, sources, 
             )}
              <div>
               <label htmlFor="description" className="block text-sm font-medium text-slate-700">Mô tả</label>
-              <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"/>
+              <textarea id="description" value={description || ''} onChange={(e) => setDescription(e.target.value)} rows={3} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"/>
             </div>
             <div>
               <label htmlFor="source" className="block text-sm font-medium text-slate-700">Nguồn</label>
