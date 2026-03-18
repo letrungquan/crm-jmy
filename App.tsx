@@ -683,9 +683,9 @@ function AppContent() {
             // Add extra notes
             const extra = extraNotesData.filter(n => 
                 n.cskh_id === c.id || // Direct CSKH notes
-                n.lead_id === c.id || // Legacy direct CSKH notes (if any)
-                leadIdToPhone[n.lead_id] === c.customer_phone || // Notes from extra leads
-                n.lead_id === c.original_lead_id // Notes from original lead
+                (n.lead_id && n.lead_id === c.id) || // Legacy direct CSKH notes (if any)
+                (n.lead_id && leadIdToPhone[n.lead_id] === c.customer_phone) || // Notes from extra leads
+                (n.lead_id && n.lead_id === c.original_lead_id) // Notes from original lead
             ).map(n => ({
                 id: n.id,
                 content: n.content,
@@ -745,7 +745,7 @@ function AppContent() {
             // Add extra notes for re-exams
             const extra = extraNotesData.filter(n => 
                 n.re_examination_id === r.id ||
-                leadIdToPhone[n.lead_id] === r.customer_phone
+                (n.lead_id && leadIdToPhone[n.lead_id] === r.customer_phone)
             ).map(n => ({
                 id: n.id,
                 content: n.content,
