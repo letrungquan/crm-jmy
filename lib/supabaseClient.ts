@@ -5,15 +5,15 @@ import { createClient } from '@supabase/supabase-js';
 // 2. Copy "Project URL" dán vào SUPABASE_URL.
 // 3. Copy "anon public key" dán vào SUPABASE_KEY.
 
-// Dán URL của bạn vào đây (Ví dụ: https://xyz.supabase.co)
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://lizxohpdhizjmxbcncln.supabase.co';
+// Dán URL của bạn vào file .env (Ví dụ: https://xyz.supabase.co)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 
-// Dán Anon Key của bạn vào đây
-// Lưu ý: Key phải bắt đầu bằng 'ey...' (JWT Token). Key 'sb_publishable...' thường là Legacy hoặc sai loại.
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || 'sb_publishable_whXBBN3gh0LCzX80k210kQ_jJDpqil-'; 
+// Dán Anon Key của bạn vào file .env
+// Lưu ý: Key phải bắt đầu bằng 'ey...' (JWT Token).
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || ''; 
 
 // Kiểm tra cấu hình sơ bộ để tránh crash app ngay lập tức
-const isValidKey = SUPABASE_KEY.startsWith('eyJ');
+const isValidKey = SUPABASE_KEY.length > 20;
 
 export const isSupabaseConfigured = 
     SUPABASE_URL.includes('supabase.co') && isValidKey;
@@ -21,7 +21,7 @@ export const isSupabaseConfigured =
 // Nếu key sai, ta truyền một dummy key để createClient không throw error ngay lập tức
 // Lỗi sẽ được bắt ở tầng fetch data trong App.tsx
 export const supabase = createClient(
-    SUPABASE_URL, 
+    SUPABASE_URL || 'https://placeholder.supabase.co', 
     isValidKey ? SUPABASE_KEY : 'ey_invalid_key_placeholder', 
     {
       auth: {
