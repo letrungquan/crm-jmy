@@ -88,12 +88,12 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, sales, statuses
       // value is "YYYY-MM-DDTHH:mm", we need to preserve the exact local time selected by the user
       // by appending the local timezone offset, or just storing it as a local ISO string
       if (value) {
-        const dateObj = new Date(value);
-        // Create an ISO string that represents the exact local time selected
-        // We do this by adjusting for the timezone offset before calling toISOString
-        const tzOffset = dateObj.getTimezoneOffset() * 60000; // offset in milliseconds
-        const localISOTime = (new Date(dateObj.getTime() - tzOffset)).toISOString().slice(0, -1); // remove the 'Z'
-        setCurrentLead(prev => ({ ...prev, [name]: localISOTime }));
+        // When we pass this to Supabase, we want it to be stored as the exact UTC time that corresponds
+        // to the user's local time selection. new Date(value).toISOString() does exactly this.
+        // For example, if value is "2026-03-16T11:00", new Date(value) parses it as local time.
+        // .toISOString() converts it to UTC (e.g., "2026-03-16T04:00:00.000Z").
+        // Supabase timestamptz will store it correctly and return it with the timezone offset.
+        setCurrentLead(prev => ({ ...prev, [name]: new Date(value).toISOString() }));
       } else {
         setCurrentLead(prev => ({ ...prev, [name]: null }));
       }

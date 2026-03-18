@@ -27,8 +27,12 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const refreshPermissions = async () => {
     try {
       setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        if (sessionError) {
+          console.error('Session error in PermissionContext:', sessionError);
+          supabase.auth.signOut({ scope: 'local' }).catch(console.error);
+        }
         setPermissions({});
         setIsAdmin(false);
         return;

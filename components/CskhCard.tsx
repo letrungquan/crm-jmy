@@ -11,10 +11,13 @@ interface CskhCardProps {
 }
 
 const CskhCard: React.FC<CskhCardProps> = ({ item, statusConfig, onDelete, onClick }) => {
-  const { canEdit } = usePermissions();
+  const { canEdit, hasPermission } = usePermissions();
+  
+  const isAssigned = item.assignedTo && item.assignedTo !== '';
+  const canEditItem = canEdit('cskh') || (hasPermission('cskh', 'view_all') && isAssigned);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    if (canEdit('cskh')) {
+    if (canEditItem) {
         e.dataTransfer.setData('cskhId', item.id);
     }
   };
@@ -45,9 +48,9 @@ const CskhCard: React.FC<CskhCardProps> = ({ item, statusConfig, onDelete, onCli
   return (
     <div
       onClick={onClick}
-      draggable={canEdit('cskh')}
+      draggable={canEditItem}
       onDragStart={handleDragStart}
-      className={`bg-white rounded-lg p-3 shadow-sm border hover:border-blue-500 group relative ${isSlaBreached ? 'border-red-400 ring-1 ring-red-400/50' : 'border-transparent'} ${canEdit('cskh') ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
+      className={`bg-white rounded-lg p-3 shadow-sm border hover:border-blue-500 group relative ${isSlaBreached ? 'border-red-400 ring-1 ring-red-400/50' : 'border-transparent'} ${canEditItem ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
     >
       {onDelete && (
           <button 

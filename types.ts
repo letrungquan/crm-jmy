@@ -209,4 +209,4 @@ export interface Activity {
   user?: string;
 }
 
-export type AppView = 'dashboard' | 'sales' | 'cskh' | 're_exam' | 'customers' | 'orders' | 'revenue' | 'hr' | 'settings' | 'guide';
+export type AppView = 'dashboard' | 'sales_performance' | 'sales' | 'cskh' | 're_exam' | 'customers' | 'orders' | 'revenue' | 'hr' | 'settings' | 'guide';

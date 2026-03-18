@@ -18,10 +18,13 @@ interface CskhDetailModalProps {
 }
 
 const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses, notes, onClose, onSave, onAddNote, onViewCustomer, onDelete, currentUser }) => {
-  const { canDelete, canEdit } = usePermissions();
+  const { canDelete, canEdit, hasPermission } = usePermissions();
   const [currentItem, setCurrentItem] = useState<CskhItem>(item);
   const [newNote, setNewNote] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  const isAssigned = item.assignedTo && item.assignedTo !== '';
+  const canEditItem = canEdit('cskh') || (hasPermission('cskh', 'view_all') && isAssigned);
   
   // Feedback state
   const [isFeedback, setIsFeedback] = useState(false);
@@ -106,7 +109,8 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
                             name="status" 
                             value={currentItem.status} 
                             onChange={handleInputChange} 
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                            disabled={!canEditItem}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 disabled:bg-slate-100"
                         >
                             {statuses.map(status => (
                                 <option key={status.id} value={status.id}>{status.name}</option>
@@ -121,7 +125,8 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
                             name="assignedTo" 
                             value={currentItem.assignedTo || ''} 
                             onChange={handleInputChange} 
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                            disabled={!canEditItem}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 disabled:bg-slate-100"
                         >
                             <option value="">-- Chưa gán --</option>
                             {sales.map(sale => (
@@ -139,7 +144,8 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
                             name="doctorName" 
                             value={currentItem.doctorName || ''} 
                             onChange={handleInputChange} 
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                            disabled={!canEditItem}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 disabled:bg-slate-100"
                         >
                             <option value="">-- Chưa gán --</option>
                             {DOCTORS.map(dr => <option key={dr} value={dr}>{dr}</option>)}
@@ -154,7 +160,8 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
                             name="reExaminationDate"
                             value={formatForDateInput(currentItem.reExaminationDate)}
                             onChange={handleInputChange}
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                            disabled={!canEditItem}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 disabled:bg-slate-100"
                         />
                     </div>
                 </div>
@@ -164,46 +171,48 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
                     <h3 className="text-lg font-semibold text-slate-700 mb-3">Lịch sử trao đổi</h3>
                     
                     {/* Add Note Input */}
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
-                        <div className="flex items-center justify-between mb-2">
-                             <label className="flex items-center space-x-2 cursor-pointer">
-                                 <input 
-                                     type="checkbox" 
-                                     checked={isFeedback} 
-                                     onChange={(e) => setIsFeedback(e.target.checked)}
-                                     className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                                 />
-                                 <span className="text-sm font-bold text-slate-700">Ghi nhận phản hồi</span>
-                             </label>
-                             {isFeedback && (
-                                 <div className="flex space-x-1">
-                                     {[1, 2, 3, 4, 5].map(star => (
-                                         <button key={star} onClick={() => setFeedbackRating(star)} className="focus:outline-none" type="button">
-                                             <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${star <= feedbackRating ? 'text-yellow-400' : 'text-slate-300'}`} viewBox="0 0 20 20" fill="currentColor">
-                                                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                             </svg>
-                                         </button>
-                                     ))}
-                                 </div>
-                             )}
+                    {canEditItem && (
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                                 <label className="flex items-center space-x-2 cursor-pointer">
+                                     <input 
+                                         type="checkbox" 
+                                         checked={isFeedback} 
+                                         onChange={(e) => setIsFeedback(e.target.checked)}
+                                         className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                     />
+                                     <span className="text-sm font-bold text-slate-700">Ghi nhận phản hồi</span>
+                                 </label>
+                                 {isFeedback && (
+                                     <div className="flex space-x-1">
+                                         {[1, 2, 3, 4, 5].map(star => (
+                                             <button key={star} onClick={() => setFeedbackRating(star)} className="focus:outline-none" type="button">
+                                                 <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${star <= feedbackRating ? 'text-yellow-400' : 'text-slate-300'}`} viewBox="0 0 20 20" fill="currentColor">
+                                                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                                 </svg>
+                                             </button>
+                                         ))}
+                                     </div>
+                                 )}
+                            </div>
+                            <div className="flex space-x-2">
+                                <textarea
+                                    value={newNote || ''}
+                                    onChange={(e) => setNewNote(e.target.value)}
+                                    placeholder={isFeedback ? "Nhập nội dung phản hồi của khách hàng..." : "Thêm ghi chú tương tác..."}
+                                    rows={2}
+                                    className="flex-grow px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 text-sm"
+                                ></textarea>
+                                <button 
+                                    onClick={handleAddNote} 
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 font-bold self-end" 
+                                    disabled={!newNote.trim()}
+                                >
+                                    Gửi
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex space-x-2">
-                            <textarea
-                                value={newNote || ''}
-                                onChange={(e) => setNewNote(e.target.value)}
-                                placeholder={isFeedback ? "Nhập nội dung phản hồi của khách hàng..." : "Thêm ghi chú tương tác..."}
-                                rows={2}
-                                className="flex-grow px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 text-sm"
-                            ></textarea>
-                            <button 
-                                onClick={handleAddNote} 
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 font-bold self-end" 
-                                disabled={!newNote.trim()}
-                            >
-                                Gửi
-                            </button>
-                        </div>
-                    </div>
+                    )}
 
                     {/* Notes List */}
                     <h3 className="text-lg font-semibold text-slate-700 mb-2 mt-4">Lịch sử tương tác</h3>
@@ -273,7 +282,7 @@ const CskhDetailModal: React.FC<CskhDetailModalProps> = ({ item, sales, statuses
               <button onClick={onClose} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50">
                 Huỷ
               </button>
-              {canEdit('cskh') && (
+              {canEditItem && (
                   <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-bold">
                     Lưu thay đổi
                   </button>

@@ -14,7 +14,7 @@ interface CskhViewProps {
 }
 
 const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhStatus, onDeleteCskh, onSelectCskh, onAddCskh }) => {
-  const { canEdit, canCreate } = usePermissions();
+  const { canEdit, canCreate, hasPermission } = usePermissions();
   const [draggedOverColumn, setDraggedOverColumn] = React.useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,9 +23,12 @@ const CskhView: React.FC<CskhViewProps> = ({ cskhItems, statuses, onUpdateCskhSt
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, statusId: string) => {
     e.preventDefault();
     setDraggedOverColumn(null);
-    if (!canEdit('cskh')) return;
     const cskhId = e.dataTransfer.getData('cskhId');
     if (cskhId) {
+      const cskhItem = cskhItems.find(c => c.id === cskhId);
+      const isAssigned = cskhItem?.assignedTo && cskhItem.assignedTo !== '';
+      const canEditItem = canEdit('cskh') || (hasPermission('cskh', 'view_all') && isAssigned);
+      if (!canEditItem) return;
       onUpdateCskhStatus(cskhId, statusId);
     }
   };

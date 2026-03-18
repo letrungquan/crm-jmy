@@ -13,7 +13,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://lizxohpdhizjm
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || 'sb_publishable_whXBBN3gh0LCzX80k210kQ_jJDpqil-'; 
 
 // Kiểm tra cấu hình sơ bộ để tránh crash app ngay lập tức
-const isValidKey = SUPABASE_KEY.length > 20;
+const isValidKey = SUPABASE_KEY.startsWith('eyJ');
 
 export const isSupabaseConfigured = 
     SUPABASE_URL.includes('supabase.co') && isValidKey;
