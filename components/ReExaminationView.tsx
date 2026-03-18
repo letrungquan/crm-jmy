@@ -19,14 +19,33 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
   const [filterStatus, setFilterStatus] = useState<'all' | 'active'>('active');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'week'>('all');
   const [draggedOverColumn, setDraggedOverColumn] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterSale, setFilterSale] = useState<string>('all');
+  const [filterDoctor, setFilterDoctor] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'appointmentDate' | 'createdAt' | 'updatedAt'>('appointmentDate');
+  
+  const uniqueDoctors = useMemo(() => {
+    const docs = new Set(reExaminations.map(r => r.doctorName).filter(Boolean));
+    return Array.from(docs) as string[];
+  }, [reExaminations]);
   
   const getSaleName = (id: string | null | undefined) => {
       if (!id) return 'Chưa gán';
       return sales.find(s => s.id === id)?.name || 'Unknown';
   };
 
-  // Helper to sort by date and time
-  const sortByDateAndTime = (a: ReExamination, b: ReExamination) => {
+  // Helper to sort
+  const sortItems = (a: ReExamination, b: ReExamination) => {
+      if (sortBy === 'createdAt') {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      if (sortBy === 'updatedAt') {
+          const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : new Date(a.createdAt).getTime();
+          const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : new Date(b.createdAt).getTime();
+          return dateB - dateA;
+      }
+      
+      // Default: appointmentDate
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
       if (dateA !== dateB) return dateA - dateB;
@@ -67,6 +86,22 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
           filterStatus === 'all' ? true : ['pending', 'called'].includes(item.status)
       );
 
+      if (searchQuery) {
+          const lowerQuery = searchQuery.toLowerCase();
+          activeItems = activeItems.filter(item => 
+              item.customerName.toLowerCase().includes(lowerQuery) || 
+              item.customerPhone.includes(searchQuery)
+          );
+      }
+
+      if (filterSale !== 'all') {
+          activeItems = activeItems.filter(item => item.assignedTo === filterSale);
+      }
+
+      if (filterDoctor !== 'all') {
+          activeItems = activeItems.filter(item => item.doctorName === filterDoctor);
+      }
+
       // Apply Date Filter
       const now = new Date();
       now.setHours(0,0,0,0);
@@ -103,7 +138,7 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
               if (!groups[docName]) groups[docName] = [];
               groups[docName].push(item);
           });
-          Object.keys(groups).forEach(key => groups[key].sort(sortByDateAndTime));
+          Object.keys(groups).forEach(key => groups[key].sort(sortItems));
           return groups;
       } else if (viewMode === 'kanban') {
           const groups: Record<string, ReExamination[]> = {
@@ -120,7 +155,7 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
               }
           });
           
-          Object.keys(groups).forEach(key => groups[key].sort(sortByDateAndTime));
+          Object.keys(groups).forEach(key => groups[key].sort(sortItems));
           return groups;
       } else {
           // Time-based grouping
@@ -152,10 +187,10 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
               }
           });
           // Sort each group
-          Object.keys(groups).forEach(key => groups[key].sort(sortByDateAndTime));
+          Object.keys(groups).forEach(key => groups[key].sort(sortItems));
           return groups;
       }
-  }, [reExaminations, viewMode, filterStatus, dateFilter]);
+  }, [reExaminations, viewMode, filterStatus, dateFilter, searchQuery, filterSale, filterDoctor, sortBy]);
 
   const STATUS_CONFIG: Record<string, { name: string, color: { bg: string, text: string } }> = {
       'pending': { name: 'Cần gọi', color: { bg: 'bg-blue-100', text: 'text-blue-800' } },
@@ -364,6 +399,58 @@ const ReExaminationView: React.FC<ReExaminationViewProps> = ({ reExaminations, s
                 </div>
             </div>
         </header>
+
+        {/* Search and Filters */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-6 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+            {/* Search */}
+            <div className="flex-1 relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+                <input
+                    type="text"
+                    placeholder="Tìm tên, SĐT khách hàng..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:placeholder-slate-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+            </div>
+
+            {/* Filters */}
+            <select
+                value={filterSale}
+                onChange={(e) => setFilterSale(e.target.value)}
+                className="block w-full sm:w-40 pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+            >
+                <option value="all">Tất cả Sale</option>
+                {sales.map(sale => (
+                    <option key={sale.id} value={sale.id}>{sale.name}</option>
+                ))}
+            </select>
+
+            <select
+                value={filterDoctor}
+                onChange={(e) => setFilterDoctor(e.target.value)}
+                className="block w-full sm:w-40 pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+            >
+                <option value="all">Tất cả Bác sĩ</option>
+                {uniqueDoctors.map(doc => (
+                    <option key={doc} value={doc}>{doc}</option>
+                ))}
+            </select>
+
+            <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="block w-full sm:w-48 pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+            >
+                <option value="appointmentDate">Sắp xếp: Ngày hẹn</option>
+                <option value="createdAt">Sắp xếp: Ngày tạo</option>
+                <option value="updatedAt">Sắp xếp: Ngày cập nhật</option>
+            </select>
+        </div>
 
         <div className="flex-1 overflow-x-auto pb-4">
             {Object.keys(groupedItems).length === 0 ? (
