@@ -323,7 +323,9 @@ function AppContent() {
                   status: data.status,
                   assignedTo: data.assigned_to,
                   externalId: data.external_id,
-                  source: data.source
+                  source: data.source,
+                  metaEventSent: data.meta_event_sent,
+                  tiktokEventSent: data.tiktok_event_sent
               };
               setOrders(prev => {
                   if (!hasPermission('orders', 'view_all') && formatted.assignedTo !== currentUser) {
@@ -730,7 +732,9 @@ function AppContent() {
             status: o.status,
             assignedTo: o.assigned_to,
             externalId: o.external_id,
-            source: o.source
+            source: o.source,
+            metaEventSent: o.meta_event_sent,
+            tiktokEventSent: o.tiktok_event_sent
         }));
         setOrders(formattedOrders);
         
@@ -1088,6 +1092,87 @@ function AppContent() {
       }
   };
 
+  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>) => {
+      if (!hasPermission('orders', 'edit')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC SỬA ĐƠN HÀNG."); return; }
+      
+      if (useLocalOnly) {
+          const newOrders = orders.map(o => o.id === orderId ? { ...o, ...updates } : o);
+          setOrders(newOrders);
+          setLocalOrders(newOrders);
+          return;
+      }
+
+      try {
+          const dbUpdates: any = { ...updates };
+          if (updates.metaEventSent !== undefined) {
+              dbUpdates.meta_event_sent = updates.metaEventSent;
+              delete dbUpdates.metaEventSent;
+          }
+          if (updates.tiktokEventSent !== undefined) {
+              dbUpdates.tiktok_event_sent = updates.tiktokEventSent;
+              delete dbUpdates.tiktokEventSent;
+          }
+          if (updates.customerPhone !== undefined) {
+              dbUpdates.customer_phone = updates.customerPhone;
+              delete dbUpdates.customerPhone;
+          }
+          if (updates.customerName !== undefined) {
+              dbUpdates.customer_name = updates.customerName;
+              delete dbUpdates.customerName;
+          }
+          if (updates.assignedTo !== undefined) {
+              dbUpdates.assigned_to = updates.assignedTo;
+              delete dbUpdates.assignedTo;
+          }
+          if (updates.externalId !== undefined) {
+              dbUpdates.external_id = updates.externalId;
+              delete dbUpdates.externalId;
+          }
+
+          const { error } = await supabase
+              .from('orders')
+              .update({
+                  ...dbUpdates,
+                  updated_at: new Date().toISOString()
+              })
+              .eq('id', orderId);
+
+          if (error) {
+              if (error.message?.includes('updated_at') || error.details?.includes('updated_at')) {
+                  console.warn("Schema cache error, falling back to old schema without updated_at");
+                  const { error: fallbackError } = await supabase
+                      .from('orders')
+                      .update({
+                          ...dbUpdates
+                      })
+                      .eq('id', orderId);
+                  
+                  if (fallbackError) {
+                      if (fallbackError.message?.includes('meta_event_sent') || fallbackError.details?.includes('meta_event_sent') || fallbackError.message?.includes('tiktok_event_sent') || fallbackError.details?.includes('tiktok_event_sent')) {
+                          alert("Lỗi: Database đang thiếu cột 'meta_event_sent' hoặc 'tiktok_event_sent'. Vui lòng vào Cài đặt -> Copy mã SQL và chạy trong Supabase để cập nhật.");
+                          throw new Error("Missing event_sent column");
+                      } else {
+                          throw fallbackError;
+                      }
+                  }
+              } else if (error.message?.includes('meta_event_sent') || error.details?.includes('meta_event_sent') || error.message?.includes('tiktok_event_sent') || error.details?.includes('tiktok_event_sent')) {
+                  alert("Lỗi: Database đang thiếu cột 'meta_event_sent' hoặc 'tiktok_event_sent'. Vui lòng vào Cài đặt -> Copy mã SQL và chạy trong Supabase để cập nhật.");
+                  throw new Error("Missing event_sent column");
+              } else {
+                  throw error;
+              }
+          }
+          
+          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updates } : o));
+      } catch (error: any) {
+          console.error('Error updating order:', error);
+          if (error.message !== "Missing event_sent column") {
+              alert('Lỗi khi cập nhật đơn hàng: ' + error.message);
+          }
+          throw error;
+      }
+  };
+
   const handleAddOrder = async (orderData: any) => {
       if (!hasPermission('orders', 'create')) { alert("CHỈ ADMIN HOẶC NGƯỜI CÓ QUYỀN MỚI ĐƯỢC THÊM ĐƠN HÀNG."); return; }
       setIsAddOrderModalOpen(false);
@@ -1098,7 +1183,9 @@ function AppContent() {
           id: `ord_${Date.now()}`,
           createdAt: new Date().toISOString(),
           status: 'completed',
-          assignedTo: currentUser
+          assignedTo: currentUser,
+          metaEventSent: false,
+          tiktokEventSent: false
       };
 
       if (useLocalOnly) {
@@ -1130,7 +1217,9 @@ function AppContent() {
               created_at: newOrder.createdAt,
               status: newOrder.status,
               assigned_to: newOrder.assignedTo || null,
-              customer_name: newOrder.customerName || null
+              customer_name: newOrder.customerName || null,
+              meta_event_sent: false,
+              tiktok_event_sent: false
           }]);
           
           if (error) {
@@ -1247,7 +1336,9 @@ function AppContent() {
           externalId: o.externalId,
           source: o.source || 'import',
           customerName: o.customerName,
-          dateOfBirth: o.dateOfBirth
+          dateOfBirth: o.dateOfBirth,
+          metaEventSent: false,
+          tiktokEventSent: false
       }));
 
       if (useLocalOnly) {
@@ -1332,7 +1423,9 @@ function AppContent() {
               assigned_to: o.assignedTo || null,
               external_id: o.externalId || null,
               source: o.source || null,
-              customer_name: o.customerName || null
+              customer_name: o.customerName || null,
+              meta_event_sent: false,
+              tiktok_event_sent: false
           })));
           
           if (error) {
@@ -2753,6 +2846,7 @@ function AppContent() {
                         setIsImportOrderModalOpen(true);
                     }}
                     onDeleteOrder={handleDeleteOrder}
+                    onUpdateOrder={handleUpdateOrder}
                     onBulkDelete={handleBulkDeleteOrders}
                     canImport={hasPermission('orders', 'import')}
                 />

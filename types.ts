@@ -121,6 +121,8 @@ export interface Order {
   source?: string;
   customerName?: string;
   dateOfBirth?: string;
+  metaEventSent?: boolean;
+  tiktokEventSent?: boolean;
 }
 
 export interface CustomerData {

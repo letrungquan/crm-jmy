@@ -2,6 +2,8 @@
 import React, { useState, useMemo } from 'react';
 import { Order, Sale, CustomerData } from '../types';
 import { usePermissions } from '../contexts/PermissionContext';
+import { sendMetaOfflineEvent } from '../lib/metaApi';
+import { sendTikTokOfflineEvent } from '../lib/tiktokApi';
 
 interface OrderListProps {
   orders: Order[];
@@ -10,6 +12,7 @@ interface OrderListProps {
   onAddOrder: () => void;
   onImportOrders: () => void;
   onDeleteOrder?: (orderId: string) => void;
+  onUpdateOrder?: (orderId: string, updates: Partial<Order>) => void;
   canImport?: boolean;
   onBulkDelete?: (orderIds: string[]) => void;
 }
@@ -49,7 +52,7 @@ const SourceBadge = ({ source }: { source?: string }) => {
     return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-teal-100 text-teal-800 border border-teal-200">{source}</span>;
 };
 
-const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOrder, onImportOrders, onDeleteOrder, canImport = false, onBulkDelete }) => {
+const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOrder, onImportOrders, onDeleteOrder, onUpdateOrder, canImport = false, onBulkDelete }) => {
   const { canCreate, canDelete } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -57,6 +60,81 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  const [isSendingMeta, setIsSendingMeta] = useState(false);
+
+  const handleSendOfflineEvents = async () => {
+      const metaPixelId = import.meta.env.VITE_META_PIXEL_ID;
+      const metaAccessToken = import.meta.env.VITE_META_ACCESS_TOKEN;
+      const tiktokPixelId = import.meta.env.VITE_TIKTOK_PIXEL_ID;
+      const tiktokAccessToken = import.meta.env.VITE_TIKTOK_ACCESS_TOKEN;
+
+      const hasMetaConfig = !!(metaPixelId && metaAccessToken);
+      const hasTikTokConfig = !!(tiktokPixelId && tiktokAccessToken);
+
+      if (!hasMetaConfig && !hasTikTokConfig) {
+          alert('Vui lòng cấu hình API Token cho Meta hoặc TikTok trong biến môi trường (.env) trước khi gửi sự kiện.');
+          return;
+      }
+
+      if (selectedOrderIds.size === 0) {
+          alert('Vui lòng chọn ít nhất 1 đơn hàng để gửi sự kiện.');
+          return;
+      }
+
+      setIsSendingMeta(true);
+      let metaSuccessCount = 0;
+      let metaFailCount = 0;
+      let tiktokSuccessCount = 0;
+      let tiktokFailCount = 0;
+
+      const selectedOrders = orders.filter(o => selectedOrderIds.has(o.id));
+
+      for (const order of selectedOrders) {
+          const customerData = customers[order.customerPhone];
+          let updates: Partial<Order> = {};
+
+          // Send Meta Event
+          if (hasMetaConfig && !order.metaEventSent) {
+              try {
+                  await sendMetaOfflineEvent('Purchase', order, customerData);
+                  updates.metaEventSent = true;
+                  metaSuccessCount++;
+              } catch (error) {
+                  console.error(`Failed to send Meta event for order ${order.id}:`, error);
+                  metaFailCount++;
+              }
+          }
+
+          // Send TikTok Event
+          if (hasTikTokConfig && !order.tiktokEventSent) {
+              try {
+                  await sendTikTokOfflineEvent('CompletePayment', order, customerData);
+                  updates.tiktokEventSent = true;
+                  tiktokSuccessCount++;
+              } catch (error) {
+                  console.error(`Failed to send TikTok event for order ${order.id}:`, error);
+                  tiktokFailCount++;
+              }
+          }
+
+          if (Object.keys(updates).length > 0 && onUpdateOrder) {
+              await onUpdateOrder(order.id, updates);
+          }
+      }
+
+      setIsSendingMeta(false);
+      
+      let message = 'Kết quả gửi sự kiện:\n';
+      if (hasMetaConfig) {
+          message += `- Meta: Thành công ${metaSuccessCount}, Thất bại ${metaFailCount}\n`;
+      }
+      if (hasTikTokConfig) {
+          message += `- TikTok: Thành công ${tiktokSuccessCount}, Thất bại ${tiktokFailCount}`;
+      }
+      
+      alert(message);
+      setSelectedOrderIds(new Set());
+  };
 
   // 1. Filter & Search
   const filteredOrders = useMemo(() => {
@@ -268,7 +346,19 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                      <span className="text-sm font-semibold text-blue-800 ml-2">Đã chọn {selectedOrderIds.size} đơn hàng</span>
                      <button onClick={() => setSelectedOrderIds(new Set())} className="text-xs text-blue-600 hover:underline">Bỏ chọn</button>
                  </div>
-                 <div>
+                 <div className="flex space-x-2">
+                     <button 
+                         onClick={handleSendOfflineEvents}
+                         disabled={isSendingMeta}
+                         className="px-3 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 flex items-center"
+                     >
+                         {isSendingMeta ? (
+                             <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                         ) : (
+                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                         )}
+                         Gửi Meta & TikTok API
+                     </button>
                      {onBulkDelete && canDelete('orders') && (
                          <button 
                              onClick={handleBulkAction} 
@@ -302,6 +392,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                             <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Doanh thu</th>
                             <th scope="col" className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
                             <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Ngày tạo</th>
+                            <th scope="col" className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">Events API</th>
                             <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nguồn</th>
                             <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Phụ trách</th>
                             <th scope="col" className="relative px-3 py-2"><span className="sr-only">Hành động</span></th>
@@ -349,6 +440,30 @@ const OrderList: React.FC<OrderListProps> = ({ orders, customers, sales, onAddOr
                                         <div className="flex flex-col">
                                             <span>{new Date(order.createdAt).toLocaleDateString('vi-VN')}</span>
                                             <span className="text-slate-400">{new Date(order.createdAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-center">
+                                        <div className="flex flex-col gap-1 items-center">
+                                            {order.metaEventSent ? (
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-medium rounded-full bg-blue-100 text-blue-800" title="Đã gửi sự kiện lên Meta">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                                    Meta
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-medium rounded-full bg-slate-100 text-slate-500" title="Chưa gửi sự kiện lên Meta">
+                                                    Meta
+                                                </span>
+                                            )}
+                                            {order.tiktokEventSent ? (
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-medium rounded-full bg-black text-white" title="Đã gửi sự kiện lên TikTok">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                                    TikTok
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-medium rounded-full bg-slate-100 text-slate-500" title="Chưa gửi sự kiện lên TikTok">
+                                                    TikTok
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap">

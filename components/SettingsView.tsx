@@ -838,6 +838,9 @@ CREATE TABLE IF NOT EXISTS re_examinations (
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name text;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS external_id text;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS source text;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_event_sent boolean DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS tiktok_event_sent boolean DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
 -- Add columns to notes table for unified interaction history
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS customer_phone text;
